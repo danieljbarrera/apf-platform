@@ -7,8 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-
 <script>
 // ════════════════════════════════════════════════════════════════
 //  ALL PURPOSE FLOWER — PRICING ENGINE CONFIG
@@ -71,15 +69,6 @@ const PRICING = {
 };
 
 
-// ════════════════════════════════════════════════════════════════
-//  EMAILJS CONFIG — see template guide at bottom of file
-// ════════════════════════════════════════════════════════════════
-const EMAILJS_CONFIG = {
-  publicKey:          "YOUR_PUBLIC_KEY",
-  serviceId:          "YOUR_SERVICE_ID",
-  templateToCustomer: "YOUR_CUSTOMER_TEMPLATE_ID",
-  templateToOwner:    "YOUR_OWNER_TEMPLATE_ID",
-};
 
 const OWNER_EMAIL   = "hello@allpurposeflowerco.com";
 const BUSINESS_NAME = "All Purpose Flower";
@@ -1003,35 +992,23 @@ function renderReveal(fname, lname, guests, hours, edate, etype, packages, barQu
 
 // ── Emails ─────────────────────────────────────────────────
 function sendEmails(fname, lname, email, phone, edate, etype, venue, guests, hours, notes, packages, barQuote) {
-  if (EMAILJS_CONFIG.publicKey === 'YOUR_PUBLIC_KEY') return;
-  emailjs.init({ publicKey: EMAILJS_CONFIG.publicKey });
-
-  var summaryOrder = [state.style].concat(['Buffet', 'Family Style', 'Plated'].filter(s => s !== state.style));
-  var pkgSummary = summaryOrder.map(s => {
-    var p = packages[s];
-    return s + ': ' + fmtD(p.total) + ' (deposit ' + fmtD(p.deposit) + ')';
-  }).join('\n');
-  if (barQuote) pkgSummary += '\n' + state.bar + ': ' + fmtD(barQuote.total);
-
-  var params = {
-    quote_id: state.quoteId,
-    customer_name: fname + ' ' + lname,
-    customer_email: email,
-    customer_phone: phone || 'Not provided',
-    event_date: edate || 'Not specified',
-    event_type: etype || 'Not specified',
-    venue: venue || 'Not specified',
-    guests, hours,
-    preferred_style: state.style,
-    appetizers: state.appetizers,
-    extras: [state.dessert && 'Dessert', state.coffee && 'Coffee & Tea', state.bar].filter(Boolean).join(', ') || 'None',
-    notes: notes || 'None',
-    package_summary: pkgSummary,
-    owner_email: OWNER_EMAIL,
-  };
-
-  emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateToCustomer, { ...params, to_email: email });
-  emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateToOwner,   { ...params, to_email: OWNER_EMAIL });
+  fetch('/api/send-quote-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fname, lname, email, phone,
+      quoteId: state.quoteId,
+      eventType: etype, eventDate: edate, venue,
+      guests, hours,
+      preferredStyle: state.style,
+      appetizers: state.appetizers,
+      dessert: state.dessert,
+      coffeeTea: state.coffee,
+      barType: state.bar,
+      notes,
+      packages, barQuote,
+    }),
+  }).catch(e => console.warn('send-quote-email:', e));
 }
 </script>
 
