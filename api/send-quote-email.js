@@ -182,12 +182,14 @@ export default async function handler(req, res) {
       transporter.sendMail({
         from: FROM_ADDRESS,
         to: email,
+        bcc: 'danieljbarrera@gmail.com',
         subject: `Your All Purpose Flower Estimate — ${quoteId}`,
         html: customerHtml({ fname, lname, quoteId, eventType, eventDate, guests, hours, preferredStyle, packages, barQuote, barType, deposit }),
       }),
       transporter.sendMail({
         from: FROM_ADDRESS,
         to: OWNER_EMAIL,
+        bcc: 'danieljbarrera@gmail.com',
         subject: `New Quote Request: ${fname} ${lname} — ${guests} guests${eventDate ? ` · ${eventDate}` : ''}`,
         html: ownerHtml({ fname, lname, email, phone, quoteId, eventType, eventDate, venue, guests, hours, preferredStyle, appetizers, dessert, coffeeTea, barType, notes, packages, barQuote }),
       }),
