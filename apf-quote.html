@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>All Purpose Flower — Get Your Quote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  ALL PURPOSE FLOWER — PRICING ENGINE CONFIG
+//  Edit these values anytime. All quotes update instantly.
+// ════════════════════════════════════════════════════════════════
+const PRICING = {
+
+  // ── Food ──────────────────────────────────────────────────
+  foodPerGuest: 65.00,        // single rate, all styles
+
+  // Menu composition shown to clients per style
+  menuComposition: {
+    "Buffet":       "1 salad, 2 mains, and 3 sides",
+    "Family Style": "1 salad, 2 mains, and 3 sides",
+    "Plated":       "2-course plated service: 1 starter and 1 main with 2 protein options and 1 vegetarian option",
+  },
+
+  // ── Staffing ──────────────────────────────────────────────
+  staffing: {
+    waitstaffHourly: 40.00,
+    captainHourly:   50.00,
+    captainCount:    1,
+    setupBreakdownHours: 4,   // always added to event hours
+    guestsPerWaitstaff: {
+      "Buffet":       25,
+      "Family Style": 13,
+      "Plated":       10,
+    },
+  },
+
+  // ── Per-guest add-ons ─────────────────────────────────────
+  addons: {
+    appetizerPerPersonEach: 3.00,   // per person, per appetizer selection
+    dessertPerGuest:        4.75,
+    coffeeTeaPerGuest:      2.85,
+  },
+
+  // ── Bar packages ──────────────────────────────────────────
+  bar: {
+    "Soft Bar": {
+      perGuest: 26.00,
+      guestsPerBartender: 75,
+      description: "All essential sodas, ice, still & sparkling water, garnish fruit, straws, napkins, tubs for chilling & ice storage. Certified and insured lead bartender as event point of contact. General and liquor liability included. Client provides all beer, wine and alcohol for 2 signature cocktails.",
+    },
+    "Full Bar": {
+      perGuest: 29.00,
+      guestsPerBartender: 50,
+      description: "All essential sodas, ice, still & sparkling water, garnish fruit, straws, napkins, tubs for chilling & ice storage. Certified and insured lead bartender as event point of contact. General and liquor liability included. Client provides all beer, wine and alcohol.",
+    },
+  },
+
+  // ── Event minimum ─────────────────────────────────────────
+  eventMinimum: 5000.00,    // minimum subtotal (food + staff + add-ons) per event
+
+  // ── Fees & payment ────────────────────────────────────────
+  salesTaxRate:   0.0925,   // 9.25%
+  serviceFeeRate: 0.10,     // 10% of subtotal
+  chargeFeeRate:  0.035,    // 3.5% card processing (waived for check/cash)
+  depositRate:    0.25,     // 25% deposit
+};
+
+// ════════════════════════════════════════════════════════════════
+//  SUPABASE CONFIG — see setup guide at bottom of file
+// ════════════════════════════════════════════════════════════════
+const SUPABASE = {
+  url:     "YOUR_SUPABASE_URL",
+  anonKey: "YOUR_SUPABASE_ANON_KEY",
+};
+
+// ════════════════════════════════════════════════════════════════
+//  EMAILJS CONFIG — see template guide at bottom of file
+// ════════════════════════════════════════════════════════════════
+const EMAILJS_CONFIG = {
+  publicKey:          "YOUR_PUBLIC_KEY",
+  serviceId:          "YOUR_SERVICE_ID",
+  templateToCustomer: "YOUR_CUSTOMER_TEMPLATE_ID",
+  templateToOwner:    "YOUR_OWNER_TEMPLATE_ID",
+};
+
+const OWNER_EMAIL   = "hello@allpurposeflowerco.com";
+const BUSINESS_NAME = "All Purpose Flower";
+const BUSINESS_TAG  = "Fine Catering & Events";
+</script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink:      #161410;
+  --ink-2:    #3b382f;
+  --ink-3:    #79715f;
+  --ink-4:    #aaa292;
+  --paper:    #faf8f3;
+  --paper-2:  #f1ece1;
+  --paper-3:  #e7dfcf;
+  --rule:     #ddd4c2;
+  --brass:    #97784c;
+  --brass-lt: #c3a06a;
+  --brass-dk: #785e36;
+  --green:    #38614a;
+  --green-lt: #ecf4ef;
+  --red:      #7c3030;
+  --red-lt:   #f9eded;
+
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans:  'Instrument Sans', system-ui, sans-serif;
+  --r-sm: 3px; --r-md: 7px; --r-lg: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 6px 24px rgba(0,0,0,0.06);
+}
+
+html { overflow-x: hidden; scroll-behavior: smooth; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.wrap { max-width: 1020px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+/* ── Masthead ─────────────────────────────────────────────── */
+.masthead { text-align: center; margin-bottom: 2.25rem; }
+.masthead-orn {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 1rem;
+}
+.masthead-orn::before, .masthead-orn::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, transparent, var(--brass-lt), transparent);
+}
+.masthead-orn span { color: var(--brass-lt); font-size: 16px; }
+.masthead h1 {
+  font-family: var(--serif); font-weight: 500;
+  font-size: clamp(1.9rem, 4.6vw, 2.7rem);
+  line-height: 1.12; margin-bottom: 0.4rem;
+}
+.masthead-sub { font-size: 13.5px; color: var(--ink-3); letter-spacing: 0.02em; }
+.masthead-brand {
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--brass); font-weight: 600; margin-bottom: 0.65rem;
+}
+
+/* ── Progress bar ─────────────────────────────────────────── */
+.progress { display: flex; justify-content: center; gap: 0; margin-bottom: 2.5rem; }
+.prog-step { display: flex; align-items: center; }
+.prog-dot {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1.5px solid var(--rule); background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--ink-4);
+  transition: all 0.3s;
+}
+.prog-label {
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-4); margin: 0 12px 0 8px; transition: color 0.3s;
+  white-space: nowrap;
+}
+.prog-line { width: 42px; height: 1.5px; background: var(--rule); margin-right: 12px; transition: background 0.3s; }
+.prog-step.active .prog-dot { border-color: var(--brass); background: var(--brass); color: #fff; }
+.prog-step.active .prog-label { color: var(--ink); font-weight: 500; }
+.prog-step.done .prog-dot { border-color: var(--brass); color: var(--brass); }
+.prog-step.done .prog-line { background: var(--brass-lt); }
+@media (max-width: 640px) { .prog-label { display: none; } .prog-line { width: 26px; } }
+
+/* ── Step layout ──────────────────────────────────────────── */
+.step { display: none; animation: stepIn 0.4s ease; }
+.step.active { display: block; }
+@keyframes stepIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.step-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 860px) { .step-grid { grid-template-columns: 1fr; } }
+
+/* ── Cards ────────────────────────────────────────────────── */
+.card {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: var(--r-lg); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card-section { padding: 1.6rem 1.9rem; border-bottom: 1px solid var(--paper-3); }
+.card-section:last-child { border-bottom: none; }
+.sec-head {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--brass); margin-bottom: 1.2rem;
+  display: flex; align-items: center; gap: 10px;
+}
+.sec-head::after { content: ''; flex: 1; height: 1px; background: var(--paper-3); }
+
+/* ── Fields ───────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.field label {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.field label .opt { font-weight: 300; opacity: 0.65; text-transform: none; letter-spacing: 0; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 520px) { .field-row { grid-template-columns: 1fr; } }
+
+input, select, textarea {
+  font-family: var(--sans); font-size: 14px; color: var(--ink);
+  background: var(--paper); border: 1px solid var(--rule);
+  border-radius: var(--r-sm); padding: 10px 12px; width: 100%;
+  outline: none; transition: border-color 0.18s, background 0.18s;
+  appearance: none; -webkit-appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--brass); background: #fff; }
+input::placeholder, textarea::placeholder { color: var(--ink-4); }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; padding-right: 30px;
+}
+
+/* ── Stepper input (for appetizer count) ──────────────────── */
+.stepper { display: flex; align-items: center; gap: 0; width: fit-content; border: 1px solid var(--rule); border-radius: var(--r-sm); overflow: hidden; }
+.stepper button {
+  width: 36px; height: 38px; border: none; background: var(--paper-2);
+  font-size: 17px; color: var(--ink-2); cursor: pointer; transition: background 0.15s;
+  font-family: var(--sans);
+}
+.stepper button:hover { background: var(--paper-3); }
+.stepper .stepper-val {
+  width: 46px; text-align: center; font-size: 15px; font-weight: 500;
+  border: none; background: #fff; height: 38px;
+}
+
+/* ── Toggle chips ─────────────────────────────────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 9px; }
+.chip {
+  border: 1.5px solid var(--rule); border-radius: 99px;
+  padding: 8px 16px; font-size: 13.5px; cursor: pointer;
+  background: var(--paper); transition: all 0.16s; user-select: none;
+  color: var(--ink-2);
+}
+.chip:hover { border-color: var(--brass-lt); }
+.chip.on {
+  border-color: var(--brass); background: var(--brass); color: #fff;
+}
+.chip .chip-sub { font-size: 11px; opacity: 0.75; margin-left: 5px; }
+
+/* ── Style cards ──────────────────────────────────────────── */
+.stylecards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 640px) { .stylecards { grid-template-columns: 1fr; } }
+.stylecard {
+  border: 1.5px solid var(--rule); border-radius: var(--r-md);
+  padding: 16px 14px 14px; cursor: pointer; transition: all 0.18s;
+  background: var(--paper); text-align: center; user-select: none; position: relative;
+}
+.stylecard:hover { border-color: var(--brass-lt); background: #fff; }
+.stylecard.on { border-color: var(--brass); background: #fff; box-shadow: 0 0 0 1px var(--brass); }
+.stylecard-check {
+  position: absolute; top: 8px; right: 8px; width: 17px; height: 17px;
+  border-radius: 50%; background: var(--brass);
+  display: none; align-items: center; justify-content: center;
+}
+.stylecard.on .stylecard-check { display: flex; }
+.stylecard-name { font-family: var(--serif); font-size: 17.5px; display: block; margin-bottom: 4px; }
+.stylecard-desc { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+.stylecard-note { font-size: 10.5px; color: var(--brass); margin-top: 7px; font-weight: 500; letter-spacing: 0.03em; }
+
+/* ── Summary panel (live, no prices) ──────────────────────── */
+.summary {
+  background: var(--ink); color: #fff; border-radius: var(--r-lg);
+  padding: 1.6rem 1.6rem 1.4rem; position: sticky; top: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.summary-brand { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--brass-lt); margin-bottom: 4px; }
+.summary-title { font-family: var(--serif); font-size: 1.3rem; margin-bottom: 1.2rem; }
+.summary-empty { font-size: 13px; color: rgba(255,255,255,0.45); font-style: italic; line-height: 1.6; }
+.sumrow { display: flex; gap: 11px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.09); font-size: 13px; align-items: baseline; }
+.sumrow:last-child { border-bottom: none; }
+.sumrow-icon { color: var(--brass-lt); font-size: 12px; width: 14px; flex-shrink: 0; }
+.sumrow-text { color: rgba(255,255,255,0.85); line-height: 1.5; }
+.sumrow-text strong { color: #fff; font-weight: 600; }
+.summary-note {
+  margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.12);
+  font-size: 11.5px; color: rgba(255,255,255,0.5); line-height: 1.55;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 12px 26px; border-radius: var(--r-sm); border: none;
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase; cursor: pointer;
+  transition: all 0.16s;
+}
+.btn:active { transform: scale(0.985); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-brass { background: var(--brass); color: #fff; }
+.btn-brass:hover:not(:disabled) { background: var(--brass-dk); }
+.btn-ghost { background: transparent; color: var(--ink-3); border: 1px solid var(--rule); }
+.btn-ghost:hover { background: var(--paper-2); }
+.btn-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 1.5rem; }
+.btn-full { width: 100%; padding: 14px; }
+
+.feedback {
+  display: none; padding: 10px 14px; border-radius: var(--r-sm);
+  font-size: 13px; margin-top: 12px; text-align: center;
+}
+.feedback.error { display: block; background: var(--red-lt); color: var(--red); border: 1px solid #e2bcbc; }
+
+/* ── Step 2: contact ──────────────────────────────────────── */
+.contact-card { max-width: 560px; margin: 0 auto; }
+.contact-tease {
+  text-align: center; padding: 2rem 1.9rem 0.4rem;
+}
+.contact-tease-icon {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: var(--green-lt); color: var(--green);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1rem; font-size: 22px;
+}
+.contact-tease h2 { font-family: var(--serif); font-size: 1.65rem; font-weight: 500; margin-bottom: 0.5rem; }
+.contact-tease p { font-size: 14px; color: var(--ink-3); max-width: 380px; margin: 0 auto; }
+
+/* ── Step 3: quote reveal ─────────────────────────────────── */
+.reveal-head { text-align: center; margin-bottom: 2rem; }
+.reveal-head-eyebrow { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass); font-weight: 600; margin-bottom: 0.5rem; }
+.reveal-head h2 { font-family: var(--serif); font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 500; margin-bottom: 0.4rem; }
+.reveal-head p { font-size: 13.5px; color: var(--ink-3); }
+.reveal-id { font-size: 11.5px; color: var(--ink-4); letter-spacing: 0.06em; margin-top: 6px; }
+
+.pkg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 1.5rem; }
+@media (max-width: 880px) { .pkg-grid { grid-template-columns: 1fr; max-width: 480px; margin-left: auto; margin-right: auto; } }
+
+.pkg {
+  background: #fff; border: 1px solid var(--rule); border-radius: var(--r-lg);
+  overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  transition: all 0.2s; position: relative;
+  opacity: 0; transform: translateY(16px);
+}
+.pkg.in { opacity: 1; transform: translateY(0); transition: all 0.5s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.pkg.chosen { border-color: var(--brass); box-shadow: 0 0 0 2px var(--brass), var(--shadow); }
+.pkg-flag {
+  position: absolute; top: 12px; right: -1px;
+  background: var(--brass); color: #fff;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 4px 11px; border-radius: 99px 0 0 99px;
+}
+.pkg-head { padding: 1.4rem 1.4rem 1.1rem; border-bottom: 1px solid var(--paper-3); }
+.pkg-style { font-family: var(--serif); font-size: 1.35rem; margin-bottom: 2px; }
+.pkg-comp { font-size: 11.5px; color: var(--ink-3); line-height: 1.5; min-height: 35px; }
+.pkg-total-label { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-4); margin-top: 0.9rem; }
+.pkg-total {
+  font-family: var(--serif); font-size: 2.1rem; font-weight: 600; color: var(--brass-dk);
+  line-height: 1.1;
+}
+.pkg-deposit { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.pkg-body { padding: 1.1rem 1.4rem; flex: 1; }
+.pkg-row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 5px 0; border-bottom: 1px solid var(--paper-2); color: var(--ink-2); gap: 8px; }
+.pkg-row:last-child { border-bottom: none; }
+.pkg-row .lbl { flex: 1; }
+.pkg-row .sub { display: block; font-size: 10.5px; color: var(--ink-4); margin-top: 1px; }
+.pkg-row .amt { font-weight: 500; color: var(--ink); white-space: nowrap; }
+.pkg-foot { padding: 0 1.4rem 1.3rem; }
+.pkg-select-btn { width: 100%; padding: 11px; font-size: 12px; }
+
+/* Bar section in reveal */
+.bar-reveal {
+  background: #fff; border: 1px solid var(--rule); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); padding: 1.5rem 1.8rem; margin-bottom: 1.5rem;
+}
+.bar-reveal-title { font-family: var(--serif); font-size: 1.25rem; margin-bottom: 0.25rem; }
+.bar-reveal-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 1.1rem; }
+.bar-line { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--paper-2); font-size: 13.5px; }
+.bar-line:last-child { border-bottom: none; }
+.bar-line .amt { font-family: var(--serif); font-size: 17px; font-weight: 600; color: var(--brass-dk); }
+
+.next-steps {
+  background: var(--green-lt); border: 1px solid #c4dccd; border-radius: var(--r-lg);
+  padding: 1.5rem 1.8rem; text-align: center;
+}
+.next-steps h3 { font-family: var(--serif); font-size: 1.3rem; font-weight: 500; color: var(--green); margin-bottom: 0.4rem; }
+.next-steps p { font-size: 13.5px; color: var(--ink-2); max-width: 480px; margin: 0 auto 1rem; }
+
+.fine-print { font-size: 11.5px; color: var(--ink-4); text-align: center; margin-top: 1.5rem; line-height: 1.6; max-width: 560px; margin-left: auto; margin-right: auto; }
+
+
+/* Grand total hero — preferred style + bar combined */
+.grand {
+  background: var(--ink); color: #fff; border-radius: var(--r-lg);
+  padding: 1.8rem 2rem; margin-bottom: 2rem; box-shadow: var(--shadow);
+  display: none; position: relative; overflow: hidden;
+  opacity: 0; transform: translateY(14px);
+}
+.grand.show { display: block; }
+.grand.in { opacity: 1; transform: translateY(0); transition: all 0.55s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.grand::before {
+  content: ''; position: absolute; top: -40px; right: -40px;
+  width: 220px; height: 220px; border-radius: 50%;
+  background: rgba(195,160,106,0.07);
+}
+.grand-eyebrow { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass-lt); font-weight: 600; margin-bottom: 0.9rem; }
+.grand-rows { margin-bottom: 1rem; }
+.grand-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);
+  font-size: 14px;
+}
+.grand-row .lbl { color: rgba(255,255,255,0.85); }
+.grand-row .lbl .sub { display: block; font-size: 11.5px; color: rgba(255,255,255,0.45); margin-top: 1px; }
+.grand-row .amt { font-weight: 500; }
+.grand-total-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-top: 1rem;
+}
+.grand-total-label { font-family: var(--serif); font-size: 1.15rem; color: rgba(255,255,255,0.9); }
+.grand-total-amt { font-family: var(--serif); font-size: 2.6rem; font-weight: 600; color: var(--brass-lt); line-height: 1; }
+.grand-deposit {
+  text-align: right; font-size: 12.5px; color: rgba(255,255,255,0.55); margin-top: 6px;
+}
+.grand-deposit strong { color: rgba(255,255,255,0.85); }
+
+/* count-up number animation */
+@keyframes countPulse { 0% { transform: scale(0.96); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+.pkg-total.counting { animation: countPulse 0.45s ease; }
+
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Masthead -->
+  <div class="masthead">
+    <div class="masthead-orn"><span>✦</span></div>
+    <div class="masthead-brand">All Purpose Flower · Fine Catering &amp; Events</div>
+    <h1>Let's Plan Your Event</h1>
+    <p class="masthead-sub">Tell us about your celebration and receive a detailed custom estimate.</p>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress">
+    <div class="prog-step active" id="prog-1">
+      <div class="prog-dot">1</div><div class="prog-label">Your event</div><div class="prog-line"></div>
+    </div>
+    <div class="prog-step" id="prog-2">
+      <div class="prog-dot">2</div><div class="prog-label">Your details</div><div class="prog-line"></div>
+    </div>
+    <div class="prog-step" id="prog-3">
+      <div class="prog-dot">3</div><div class="prog-label">Your estimate</div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STEP 1: EVENT BUILDER ═══════════ -->
+  <div class="step active" id="step-1">
+    <div class="step-grid">
+      <div class="card">
+
+        <div class="card-section">
+          <div class="sec-head">The basics</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Event date</label>
+              <input type="date" id="edate" onchange="updateSummary()" />
+            </div>
+            <div class="field">
+              <label>Event type</label>
+              <select id="etype" onchange="updateSummary()">
+                <option value="">Select...</option>
+                <option>Wedding</option>
+                <option>Corporate event</option>
+                <option>Birthday celebration</option>
+                <option>Anniversary</option>
+                <option>Cocktail reception</option>
+                <option>Holiday party</option>
+                <option>Private dinner</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Venue / location <span class="opt">(if known)</span></label>
+            <input type="text" id="venue" placeholder="e.g. Carousel House, Golden Gate Park" onchange="updateSummary()" />
+          </div>
+        </div>
+
+        <div class="card-section">
+          <div class="sec-head">Guests &amp; timing</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Number of guests</label>
+              <input type="number" id="guests" placeholder="150" min="10" max="2000" oninput="updateSummary()" />
+            </div>
+            <div class="field">
+              <label>Event duration (hours)</label>
+              <select id="hours" onchange="updateSummary()">
+                <option value="">Select...</option>
+                <option value="3">3 hours</option>
+                <option value="4">4 hours</option>
+                <option value="5">5 hours</option>
+                <option value="6" selected>6 hours</option>
+                <option value="7">7 hours</option>
+                <option value="8">8 hours</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <div class="sec-head">Service style preference</div>
+          <p style="font-size:12.5px; color:var(--ink-3); margin-bottom:1rem;">Your estimate will show all three styles — select the one you're leaning toward.</p>
+          <div class="stylecards">
+            <div class="stylecard" data-style="Buffet" onclick="pickStyle(this)">
+              <div class="stylecard-check"><svg width="9" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+              <span class="stylecard-name">Buffet</span>
+              <span class="stylecard-desc">Beautifully styled self-serve stations</span>
+              <div class="stylecard-note">Most relaxed</div>
+            </div>
+            <div class="stylecard" data-style="Family Style" onclick="pickStyle(this)">
+              <div class="stylecard-check"><svg width="9" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+              <span class="stylecard-name">Family Style</span>
+              <span class="stylecard-desc">Generous shared platters at each table</span>
+              <div class="stylecard-note">Most convivial</div>
+            </div>
+            <div class="stylecard" data-style="Plated" onclick="pickStyle(this)">
+              <div class="stylecard-check"><svg width="9" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+              <span class="stylecard-name">Plated</span>
+              <span class="stylecard-desc">Elegant individually plated courses</span>
+              <div class="stylecard-note">Most refined</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <div class="sec-head">Enhancements</div>
+
+          <div class="field" style="margin-bottom:18px;">
+            <label>Passed appetizers <span class="opt">($3 per person, per selection)</span></label>
+            <div style="display:flex; align-items:center; gap:14px; margin-top:4px;">
+              <div class="stepper">
+                <button type="button" onclick="stepApp(-1)">−</button>
+                <input class="stepper-val" id="appetizers" value="0" readonly />
+                <button type="button" onclick="stepApp(1)">+</button>
+              </div>
+              <span style="font-size:12.5px; color:var(--ink-3);" id="app-hint">No appetizers selected</span>
+            </div>
+          </div>
+
+          <div class="field" style="margin-bottom:18px;">
+            <label>Additional courses</label>
+            <div class="chips" style="margin-top:4px;">
+              <div class="chip" id="chip-dessert" onclick="toggleChip(this, 'dessert')">Dessert <span class="chip-sub">$4.75/guest</span></div>
+              <div class="chip" id="chip-coffee" onclick="toggleChip(this, 'coffee')">Coffee &amp; Tea <span class="chip-sub">$2.85/guest</span></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Bar service <span class="opt">(optional — quoted separately)</span></label>
+            <div class="chips" style="margin-top:4px;">
+              <div class="chip" id="chip-softbar" onclick="pickBar(this, 'Soft Bar')">Soft Bar <span class="chip-sub">$26/guest</span></div>
+              <div class="chip" id="chip-fullbar" onclick="pickBar(this, 'Full Bar')">Full Bar <span class="chip-sub">$29/guest</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <div class="sec-head">Anything else?</div>
+          <div class="field">
+            <label>Tell us about your vision <span class="opt">(optional)</span></label>
+            <textarea id="notes" rows="3" placeholder="Dietary needs, themes, special requests, questions..."></textarea>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <button class="btn btn-brass btn-full" onclick="goToStep(2)">Continue → See My Estimate</button>
+          <div class="feedback" id="fb-1"></div>
+        </div>
+      </div>
+
+      <!-- Live summary panel -->
+      <div class="summary" id="summary-panel">
+        <div class="summary-brand">Your event</div>
+        <div class="summary-title">Taking shape...</div>
+        <div id="summary-rows">
+          <p class="summary-empty">Start filling in your event details and watch your celebration come together here.</p>
+        </div>
+        <div class="summary-note">
+          Our team handles setup and breakdown — typically arriving 4 hours around your event time so everything is seamless.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STEP 2: CONTACT CAPTURE ═══════════ -->
+  <div class="step" id="step-2">
+    <div class="card contact-card">
+      <div class="contact-tease">
+        <div class="contact-tease-icon">✓</div>
+        <h2>Your estimate is ready</h2>
+        <p>We've prepared a detailed estimate with all three service styles for your <strong id="tease-summary">event</strong>. Where should we send it?</p>
+      </div>
+      <div class="card-section">
+        <div class="field-row">
+          <div class="field">
+            <label>First name</label>
+            <input type="text" id="fname" placeholder="Jane" autocomplete="given-name" />
+          </div>
+          <div class="field">
+            <label>Last name</label>
+            <input type="text" id="lname" placeholder="Smith" autocomplete="family-name" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Email address</label>
+          <input type="email" id="email" placeholder="jane@example.com" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label>Phone <span class="opt">(so we can follow up personally)</span></label>
+          <input type="tel" id="phone" placeholder="(555) 555-5555" autocomplete="tel" />
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="goToStep(1)">← Back</button>
+          <button class="btn btn-brass" id="reveal-btn" onclick="submitAndReveal()">View My Estimate</button>
+        </div>
+        <div class="feedback" id="fb-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STEP 3: QUOTE REVEAL ═══════════ -->
+  <div class="step" id="step-3">
+    <div class="reveal-head">
+      <div class="reveal-head-eyebrow">Prepared exclusively for</div>
+      <h2 id="reveal-name">—</h2>
+      <p id="reveal-meta">—</p>
+      <div class="reveal-id" id="reveal-id"></div>
+    </div>
+
+    <div class="grand" id="grand-total"><!-- injected --></div>
+
+    <p style="text-align:center; font-size:12.5px; color:var(--ink-3); margin-bottom:1.1rem;">Your preferred style is shown first — we've included all three so you can compare.</p>
+    <div class="pkg-grid" id="pkg-grid"><!-- packages injected --></div>
+
+    <div class="bar-reveal" id="bar-reveal" style="display:none;"><!-- bar injected --></div>
+
+    <div class="next-steps">
+      <h3>Love what you see?</h3>
+      <p>A copy of this estimate is on its way to your inbox. We'll reach out within 24 hours to talk through your vision, customize your menu, and answer every question.</p>
+      <button class="btn btn-brass" onclick="window.location.href='https://allpurposeflowerco.com'">Visit Our Website</button>
+    </div>
+
+    <p class="fine-print">
+      This estimate is based on the details provided and current pricing. Final pricing is confirmed in your formal proposal after menu planning. Sales tax (9.25%), service fee (10%), and card processing fee (3.5%, waived for check or cash payment) are included in totals shown. A 25% deposit secures your date.
+    </p>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+var state = {
+  style: null,         // preferred style
+  appetizers: 0,
+  dessert: false,
+  coffee: false,
+  bar: null,           // 'Soft Bar' | 'Full Bar' | null
+  quoteId: null,
+};
+
+var fmt  = n => '$' + Math.round(n).toLocaleString('en-US');
+var fmtD = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ── Pricing engine ─────────────────────────────────────────
+function calcStaffing(guests, eventHours, style) {
+  var s = PRICING.staffing;
+  var ratio = s.guestsPerWaitstaff[style];
+  // Floor matches APF invoice behavior (150 guests / 13 = 11 waitstaff, not 12)
+  var waitstaff = Math.max(1, Math.floor(guests / ratio));
+  var totalHours = eventHours + s.setupBreakdownHours;
+  var hourlyCost = waitstaff * s.waitstaffHourly + s.captainCount * s.captainHourly;
+  return {
+    waitstaff, totalHours,
+    captain: s.captainCount,
+    cost: hourlyCost * totalHours,
+    hourlyCost,
+  };
+}
+
+function calcPackage(guests, eventHours, style) {
+  var food = PRICING.foodPerGuest * guests;
+  var staffing = calcStaffing(guests, eventHours, style);
+  var apps = state.appetizers * PRICING.addons.appetizerPerPersonEach * guests;
+  var dessert = state.dessert ? PRICING.addons.dessertPerGuest * guests : 0;
+  var coffee  = state.coffee  ? PRICING.addons.coffeeTeaPerGuest * guests : 0;
+
+  var rawSubtotal = food + staffing.cost + apps + dessert + coffee;
+  var minimumApplied = rawSubtotal < PRICING.eventMinimum;
+  var subtotal = Math.max(rawSubtotal, PRICING.eventMinimum);
+  var tax      = subtotal * PRICING.salesTaxRate;
+  var service  = subtotal * PRICING.serviceFeeRate;
+  var charge   = subtotal * PRICING.chargeFeeRate;
+  var total    = subtotal + tax + service + charge;
+  var deposit  = total * PRICING.depositRate;
+
+  return { food, staffing, apps, dessert, coffee, rawSubtotal, minimumApplied, subtotal, tax, service, charge, total, deposit };
+}
+
+function calcBar(guests, barType) {
+  var b = PRICING.bar[barType];
+  var base = b.perGuest * guests;
+  var bartenders = Math.ceil(guests / b.guestsPerBartender);
+  var subtotal = base;
+  var tax     = subtotal * PRICING.salesTaxRate;
+  var service = subtotal * PRICING.serviceFeeRate;
+  var charge  = subtotal * PRICING.chargeFeeRate;
+  return { base, bartenders, subtotal, tax, service, charge, total: subtotal + tax + service + charge };
+}
+
+// ── Step 1 interactions ────────────────────────────────────
+function pickStyle(el) {
+  document.querySelectorAll('.stylecard').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  state.style = el.dataset.style;
+  updateSummary();
+}
+
+function stepApp(delta) {
+  state.appetizers = Math.max(0, Math.min(6, state.appetizers + delta));
+  document.getElementById('appetizers').value = state.appetizers;
+  var hint = document.getElementById('app-hint');
+  hint.textContent = state.appetizers === 0 ? 'No appetizers selected'
+    : state.appetizers + ' passed appetizer' + (state.appetizers > 1 ? 's' : '') + ' during cocktail hour';
+  updateSummary();
+}
+
+function toggleChip(el, key) {
+  state[key] = !state[key];
+  el.classList.toggle('on', state[key]);
+  updateSummary();
+}
+
+function pickBar(el, barType) {
+  if (state.bar === barType) {
+    state.bar = null;
+    el.classList.remove('on');
+  } else {
+    state.bar = barType;
+    document.getElementById('chip-softbar').classList.toggle('on', barType === 'Soft Bar');
+    document.getElementById('chip-fullbar').classList.toggle('on', barType === 'Full Bar');
+  }
+  updateSummary();
+}
+
+// ── Live summary (production value, no prices) ─────────────
+function updateSummary() {
+  var guests = parseInt(document.getElementById('guests').value);
+  var hours  = parseFloat(document.getElementById('hours').value);
+  var edate  = document.getElementById('edate').value;
+  var etype  = document.getElementById('etype').value;
+  var venue  = document.getElementById('venue').value.trim();
+
+  var rows = [];
+  if (etype) rows.push(['✦', '<strong>' + etype + '</strong>' + (edate ? ' on <strong>' + prettyDate(edate) + '</strong>' : '')]);
+  else if (edate) rows.push(['✦', 'Event on <strong>' + prettyDate(edate) + '</strong>']);
+  if (venue) rows.push(['⚐', 'At <strong>' + venue + '</strong>']);
+  if (guests) rows.push(['☰', '<strong>' + guests + ' guests</strong> celebrating with you']);
+
+  if (guests && hours && state.style) {
+    var st = calcStaffing(guests, hours, state.style);
+    rows.push(['✦', '<strong>' + state.style + '</strong> service — ' + PRICING.menuComposition[state.style]]);
+    rows.push(['✧', 'A team of <strong>' + st.waitstaff + ' waitstaff</strong> and <strong>' + st.captain + ' captain</strong> caring for your guests']);
+    rows.push(['◷', '<strong>' + st.totalHours + ' hours</strong> on site — your ' + hours + '-hour event plus full setup and breakdown']);
+  } else if (guests && hours) {
+    rows.push(['◷', '<strong>' + hours + '-hour</strong> celebration (+4 hrs setup & breakdown by our team)']);
+  }
+
+  if (state.appetizers > 0 && guests) {
+    rows.push(['✧', '<strong>' + state.appetizers + ' passed appetizer' + (state.appetizers > 1 ? 's' : '') + '</strong> during cocktail hour']);
+  }
+  var courses = [];
+  if (state.dessert) courses.push('dessert');
+  if (state.coffee) courses.push('coffee & tea service');
+  if (courses.length) rows.push(['✧', 'Finishing with <strong>' + courses.join('</strong> and <strong>') + '</strong>']);
+
+  if (state.bar && guests) {
+    var b = calcBar(guests, state.bar);
+    rows.push(['✦', '<strong>' + state.bar + '</strong> with ' + b.bartenders + ' certified bartender' + (b.bartenders > 1 ? 's' : '')]);
+  }
+
+  var container = document.getElementById('summary-rows');
+  var title = document.querySelector('.summary-title');
+  if (!rows.length) {
+    container.innerHTML = '<p class="summary-empty">Start filling in your event details and watch your celebration come together here.</p>';
+    title.textContent = 'Taking shape...';
+  } else {
+    title.textContent = rows.length >= 5 ? 'Looking wonderful' : 'Taking shape...';
+    container.innerHTML = rows.map(r =>
+      '<div class="sumrow"><span class="sumrow-icon">' + r[0] + '</span><span class="sumrow-text">' + r[1] + '</span></div>'
+    ).join('');
+  }
+}
+
+function prettyDate(iso) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ── Step navigation ────────────────────────────────────────
+function goToStep(n) {
+  if (n === 2) {
+    var fb = document.getElementById('fb-1');
+    fb.className = 'feedback';
+    var guests = parseInt(document.getElementById('guests').value);
+    var hours  = parseFloat(document.getElementById('hours').value);
+    if (!guests || guests < 10) { fb.textContent = 'Please enter your guest count (minimum 10).'; fb.className = 'feedback error'; return; }
+    if (!hours) { fb.textContent = 'Please select your event duration.'; fb.className = 'feedback error'; return; }
+    if (!state.style) { fb.textContent = 'Please select a service style preference.'; fb.className = 'feedback error'; return; }
+
+    // Build tease line
+    var etype = document.getElementById('etype').value || 'celebration';
+    document.getElementById('tease-summary').textContent =
+      guests + '-guest ' + etype.toLowerCase();
+  }
+
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+
+  for (var i = 1; i <= 3; i++) {
+    var p = document.getElementById('prog-' + i);
+    p.classList.toggle('active', i === n);
+    p.classList.toggle('done', i < n);
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Supabase ───────────────────────────────────────────────
+async function sbInsert(data) {
+  if (SUPABASE.url === 'YOUR_SUPABASE_URL') return;
+  try {
+    await fetch(SUPABASE.url + '/rest/v1/quotes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE.anonKey,
+        'Authorization': 'Bearer ' + SUPABASE.anonKey,
+      },
+      body: JSON.stringify(data),
+    });
+  } catch(e) { console.warn('Supabase:', e); }
+}
+
+// ── Submit & reveal ────────────────────────────────────────
+async function submitAndReveal() {
+  var fb = document.getElementById('fb-2');
+  fb.className = 'feedback';
+
+  var fname = document.getElementById('fname').value.trim();
+  var lname = document.getElementById('lname').value.trim();
+  var email = document.getElementById('email').value.trim();
+  var phone = document.getElementById('phone').value.trim();
+
+  if (!fname) { fb.textContent = 'Please enter your first name.'; fb.className = 'feedback error'; return; }
+  if (!lname) { fb.textContent = 'Please enter your last name.'; fb.className = 'feedback error'; return; }
+  if (!email || !/\S+@\S+\.\S+/.test(email)) { fb.textContent = 'Please enter a valid email.'; fb.className = 'feedback error'; return; }
+
+  var btn = document.getElementById('reveal-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Preparing...';
+
+  var guests = parseInt(document.getElementById('guests').value);
+  var hours  = parseFloat(document.getElementById('hours').value);
+  var edate  = document.getElementById('edate').value;
+  var etype  = document.getElementById('etype').value;
+  var venue  = document.getElementById('venue').value.trim();
+  var notes  = document.getElementById('notes').value.trim();
+
+  state.quoteId = 'APF-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000);
+
+  // Calculate all three packages
+  var packages = {};
+  ['Buffet', 'Family Style', 'Plated'].forEach(style => {
+    packages[style] = calcPackage(guests, hours, style);
+  });
+  var barQuote = state.bar ? calcBar(guests, state.bar) : null;
+
+  // Save to Supabase
+  await sbInsert({
+    quote_id: state.quoteId,
+    first_name: fname, last_name: lname, email, phone: phone || null,
+    event_date: edate || null, event_type: etype || null, venue: venue || null,
+    guests, hours,
+    preferred_style: state.style,
+    appetizers: state.appetizers,
+    dessert: state.dessert, coffee_tea: state.coffee,
+    bar_package: state.bar,
+    notes: notes || null,
+    total_buffet: packages['Buffet'].total,
+    total_family: packages['Family Style'].total,
+    total_plated: packages['Plated'].total,
+    total_bar: barQuote ? barQuote.total : null,
+    status: 'New',
+  });
+
+  // Send emails
+  sendEmails(fname, lname, email, phone, edate, etype, venue, guests, hours, notes, packages, barQuote);
+
+  // Render reveal
+  renderReveal(fname, lname, guests, hours, edate, etype, packages, barQuote);
+
+  btn.disabled = false;
+  btn.textContent = 'View My Estimate';
+  goToStep(3);
+
+  // Stagger animations: grand total first, then packages
+  setTimeout(() => {
+    document.getElementById('grand-total').classList.add('in');
+    document.querySelectorAll('.pkg').forEach((p, i) => {
+      setTimeout(() => p.classList.add('in'), 200 + i * 160);
+    });
+  }, 120);
+}
+
+// ── Render reveal ──────────────────────────────────────────
+function renderReveal(fname, lname, guests, hours, edate, etype, packages, barQuote) {
+  document.getElementById('reveal-name').textContent = fname + ' ' + lname;
+  var meta = [guests + ' guests', hours + '-hour event'];
+  if (etype) meta.unshift(etype);
+  if (edate) meta.push(prettyDate(edate));
+  document.getElementById('reveal-meta').textContent = meta.join(' · ');
+  document.getElementById('reveal-id').textContent = 'Estimate ' + state.quoteId;
+
+  // Grand total hero: preferred style + bar combined
+  var grand = document.getElementById('grand-total');
+  var pref = packages[state.style];
+  var grandTotal = pref.total + (barQuote ? barQuote.total : 0);
+  var grandDeposit = grandTotal * PRICING.depositRate;
+
+  var grandRows = '<div class="grand-row"><span class="lbl">' + state.style + ' catering<span class="sub">' + guests + ' guests · full service, staff, tax & fees included</span></span><span class="amt">' + fmtD(pref.total) + '</span></div>';
+  if (barQuote) {
+    grandRows += '<div class="grand-row"><span class="lbl">' + state.bar + '<span class="sub">' + barQuote.bartenders + ' certified bartender' + (barQuote.bartenders > 1 ? 's' : '') + ' · tax & fees included</span></span><span class="amt">' + fmtD(barQuote.total) + '</span></div>';
+  }
+
+  grand.innerHTML =
+    '<div class="grand-eyebrow">Your selection — all in</div>' +
+    '<div class="grand-rows">' + grandRows + '</div>' +
+    '<div class="grand-total-row">' +
+      '<span class="grand-total-label">Estimated grand total</span>' +
+      '<span class="grand-total-amt">' + fmtD(grandTotal) + '</span>' +
+    '</div>' +
+    '<div class="grand-deposit">A <strong>' + fmtD(grandDeposit) + '</strong> deposit (25%) secures your date</div>';
+  grand.classList.add('show');
+
+  var grid = document.getElementById('pkg-grid');
+  // Preferred style first, then the others in standard order
+  var styleOrder = [state.style].concat(['Buffet', 'Family Style', 'Plated'].filter(s => s !== state.style));
+  grid.innerHTML = styleOrder.map(style => {
+    var p = packages[style];
+    var st = p.staffing;
+    var isPreferred = style === state.style;
+
+    var rows = [
+      ['Food', PRICING.menuComposition[style].split(':')[0].length > 40 ? 'Custom menu' : guests + ' × ' + fmt(PRICING.foodPerGuest), fmtD(p.food)],
+      ['Event staff', st.waitstaff + ' waitstaff + ' + st.captain + ' captain × ' + st.totalHours + ' hrs', fmtD(p.staffing.cost)],
+    ];
+    if (p.apps)    rows.push(['Appetizers (' + state.appetizers + ')', guests + ' × ' + fmt(state.appetizers * PRICING.addons.appetizerPerPersonEach), fmtD(p.apps)]);
+    if (p.dessert) rows.push(['Dessert', guests + ' × ' + fmtD(PRICING.addons.dessertPerGuest), fmtD(p.dessert)]);
+    if (p.coffee)  rows.push(['Coffee & Tea', guests + ' × ' + fmtD(PRICING.addons.coffeeTeaPerGuest), fmtD(p.coffee)]);
+    if (p.minimumApplied) rows.push(['Event minimum', 'Our ' + fmt(PRICING.eventMinimum) + ' event minimum applies', fmtD(PRICING.eventMinimum - p.rawSubtotal)]);
+    rows.push(['Subtotal', '', fmtD(p.subtotal)]);
+    rows.push(['Sales tax', (PRICING.salesTaxRate * 100).toFixed(2) + '%', fmtD(p.tax)]);
+    rows.push(['Service fee', (PRICING.serviceFeeRate * 100) + '%', fmtD(p.service)]);
+    rows.push(['Card processing', (PRICING.chargeFeeRate * 100) + '% — waived for check/cash', fmtD(p.charge)]);
+
+    return '<div class="pkg' + (isPreferred ? ' chosen' : '') + '">' +
+      (isPreferred ? '<div class="pkg-flag">Your pick</div>' : '') +
+      '<div class="pkg-head">' +
+        '<div class="pkg-style">' + style + '</div>' +
+        '<div class="pkg-comp">' + PRICING.menuComposition[style] + '</div>' +
+        '<div class="pkg-total-label">Estimated total</div>' +
+        '<div class="pkg-total counting">' + fmtD(p.total) + '</div>' +
+        '<div class="pkg-deposit">25% deposit: ' + fmtD(p.deposit) + ' secures your date</div>' +
+      '</div>' +
+      '<div class="pkg-body">' +
+        rows.map(r => '<div class="pkg-row"><span class="lbl">' + r[0] + (r[1] ? '<span class="sub">' + r[1] + '</span>' : '') + '</span><span class="amt">' + r[2] + '</span></div>').join('') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  // Bar
+  var barDiv = document.getElementById('bar-reveal');
+  if (barQuote && state.bar) {
+    var b = PRICING.bar[state.bar];
+    barDiv.style.display = 'block';
+    barDiv.innerHTML =
+      '<div class="bar-reveal-title">' + state.bar + ' Service</div>' +
+      '<div class="bar-reveal-sub">' + b.description + '</div>' +
+      '<div class="bar-line"><span>' + guests + ' guests × ' + fmt(b.perGuest) + ' · ' + barQuote.bartenders + ' bartender' + (barQuote.bartenders > 1 ? 's' : '') + '</span><span>' + fmtD(barQuote.subtotal) + '</span></div>' +
+      '<div class="bar-line"><span>Sales tax + service fee + card processing</span><span>' + fmtD(barQuote.tax + barQuote.service + barQuote.charge) + '</span></div>' +
+      '<div class="bar-line"><span style="font-weight:600;">Bar total</span><span class="amt">' + fmtD(barQuote.total) + '</span></div>';
+  } else {
+    barDiv.style.display = 'none';
+  }
+}
+
+// ── Emails ─────────────────────────────────────────────────
+function sendEmails(fname, lname, email, phone, edate, etype, venue, guests, hours, notes, packages, barQuote) {
+  if (EMAILJS_CONFIG.publicKey === 'YOUR_PUBLIC_KEY') return;
+  emailjs.init({ publicKey: EMAILJS_CONFIG.publicKey });
+
+  var summaryOrder = [state.style].concat(['Buffet', 'Family Style', 'Plated'].filter(s => s !== state.style));
+  var pkgSummary = summaryOrder.map(s => {
+    var p = packages[s];
+    return s + ': ' + fmtD(p.total) + ' (deposit ' + fmtD(p.deposit) + ')';
+  }).join('\n');
+  if (barQuote) pkgSummary += '\n' + state.bar + ': ' + fmtD(barQuote.total);
+
+  var params = {
+    quote_id: state.quoteId,
+    customer_name: fname + ' ' + lname,
+    customer_email: email,
+    customer_phone: phone || 'Not provided',
+    event_date: edate || 'Not specified',
+    event_type: etype || 'Not specified',
+    venue: venue || 'Not specified',
+    guests, hours,
+    preferred_style: state.style,
+    appetizers: state.appetizers,
+    extras: [state.dessert && 'Dessert', state.coffee && 'Coffee & Tea', state.bar].filter(Boolean).join(', ') || 'None',
+    notes: notes || 'None',
+    package_summary: pkgSummary,
+    owner_email: OWNER_EMAIL,
+  };
+
+  emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateToCustomer, { ...params, to_email: email });
+  emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateToOwner,   { ...params, to_email: OWNER_EMAIL });
+}
+</script>
+
+<!--
+╔══════════════════════════════════════════════════════════════════╗
+║                    SUPABASE SETUP — SQL                          ║
+╠══════════════════════════════════════════════════════════════════╣
+
+CREATE TABLE quotes (
+  id              bigserial PRIMARY KEY,
+  quote_id        text,
+  first_name      text,
+  last_name       text,
+  email           text,
+  phone           text,
+  event_date      date,
+  event_type      text,
+  venue           text,
+  guests          integer,
+  hours           numeric,
+  preferred_style text,
+  appetizers      integer DEFAULT 0,
+  dessert         boolean DEFAULT false,
+  coffee_tea      boolean DEFAULT false,
+  bar_package     text,
+  notes           text,
+  total_buffet    numeric,
+  total_family    numeric,
+  total_plated    numeric,
+  total_bar       numeric,
+  status          text DEFAULT 'New',
+  internal_notes  text,
+  created_at      timestamptz DEFAULT now()
+);
+
+ALTER TABLE quotes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow insert" ON quotes FOR INSERT WITH CHECK (true);
+
+║  Note: no public read policy — quote data is only readable      ║
+║  via the Supabase dashboard or authenticated admin access.      ║
+╚══════════════════════════════════════════════════════════════════╝
+-->
+</body>
+</html>
