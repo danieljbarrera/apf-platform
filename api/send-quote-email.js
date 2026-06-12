@@ -181,6 +181,7 @@ export default async function handler(req, res) {
     await Promise.all([
       transporter.sendMail({
         from: FROM_ADDRESS,
+        replyTo: 'info@allpurposeflowerco.com',
         to: email,
         bcc: 'danieljbarrera@gmail.com',
         subject: `Your All Purpose Flower Estimate — ${quoteId}`,
