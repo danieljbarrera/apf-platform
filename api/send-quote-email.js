@@ -1,4 +1,4 @@
-const OWNER_EMAIL   = 'hello@allpurposeflowerco.com';
+const OWNER_EMAIL   = 'danieljbarrera@gmail.com';
 const FROM_ADDRESS  = 'All Purpose Flower <onboarding@resend.dev>';
 const BRAND_COLOR   = '#97784c';
 const DARK_COLOR    = '#161410';
