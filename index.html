@@ -824,6 +824,10 @@ function goToStep(n) {
     p.classList.toggle('done', i < n);
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Tell parent iframe to resize
+  setTimeout(() => {
+    window.parent.postMessage({ apfHeight: document.body.scrollHeight }, '*');
+  }, 600);
 }
 
 // ── Supabase (via serverless function — no keys in client) ─
