@@ -70,13 +70,6 @@ const PRICING = {
   depositRate:    0.25,     // 25% deposit
 };
 
-// ════════════════════════════════════════════════════════════════
-//  SUPABASE CONFIG — see setup guide at bottom of file
-// ════════════════════════════════════════════════════════════════
-const SUPABASE = {
-  url:     "YOUR_SUPABASE_URL",
-  anonKey: "YOUR_SUPABASE_ANON_KEY",
-};
 
 // ════════════════════════════════════════════════════════════════
 //  EMAILJS CONFIG — see template guide at bottom of file
@@ -844,20 +837,15 @@ function goToStep(n) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// ── Supabase ───────────────────────────────────────────────
+// ── Supabase (via serverless function — no keys in client) ─
 async function sbInsert(data) {
-  if (SUPABASE.url === 'YOUR_SUPABASE_URL') return;
   try {
-    await fetch(SUPABASE.url + '/rest/v1/quotes', {
+    await fetch('/api/submit-quote', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE.anonKey,
-        'Authorization': 'Bearer ' + SUPABASE.anonKey,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-  } catch(e) { console.warn('Supabase:', e); }
+  } catch(e) { console.warn('submit-quote:', e); }
 }
 
 // ── Submit & reveal ────────────────────────────────────────
