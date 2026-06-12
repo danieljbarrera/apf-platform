@@ -1,5 +1,5 @@
-const OWNER_EMAIL   = 'danieljbarrera@gmail.com';
-const FROM_ADDRESS  = 'All Purpose Flower <onboarding@resend.dev>';
+const OWNER_EMAIL  = 'info@allpurposeflowerco.com';
+const FROM_ADDRESS = 'All Purpose Flower <info@allpurposeflowerco.com>';
 const BRAND_COLOR   = '#97784c';
 const DARK_COLOR    = '#161410';
 
@@ -159,8 +159,8 @@ function ownerHtml({ fname, lname, email, phone, quoteId, eventType, eventDate, 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { RESEND_API_KEY } = process.env;
-  if (!RESEND_API_KEY) return res.status(500).json({ error: 'Server misconfigured' });
+  const { GMAIL_USER, GMAIL_APP_PASSWORD } = process.env;
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) return res.status(500).json({ error: 'Server misconfigured' });
 
   const {
     fname, lname, email, phone, quoteId,
@@ -172,34 +172,26 @@ export default async function handler(req, res) {
   const deposit = packages[preferredStyle]?.deposit;
 
   try {
-    const [customerRes, ownerRes] = await Promise.all([
-      fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM_ADDRESS,
-          to: email,
-          subject: `Your All Purpose Flower Estimate — ${quoteId}`,
-          html: customerHtml({ fname, lname, quoteId, eventType, eventDate, guests, hours, preferredStyle, packages, barQuote, barType, deposit }),
-        }),
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.default.createTransport({
+      service: 'gmail',
+      auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    });
+
+    await Promise.all([
+      transporter.sendMail({
+        from: FROM_ADDRESS,
+        to: email,
+        subject: `Your All Purpose Flower Estimate — ${quoteId}`,
+        html: customerHtml({ fname, lname, quoteId, eventType, eventDate, guests, hours, preferredStyle, packages, barQuote, barType, deposit }),
       }),
-      fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM_ADDRESS,
-          to: OWNER_EMAIL,
-          subject: `New Quote Request: ${fname} ${lname} — ${guests} guests${eventDate ? ` · ${eventDate}` : ''}`,
-          html: ownerHtml({ fname, lname, email, phone, quoteId, eventType, eventDate, venue, guests, hours, preferredStyle, appetizers, dessert, coffeeTea, barType, notes, packages, barQuote }),
-        }),
+      transporter.sendMail({
+        from: FROM_ADDRESS,
+        to: OWNER_EMAIL,
+        subject: `New Quote Request: ${fname} ${lname} — ${guests} guests${eventDate ? ` · ${eventDate}` : ''}`,
+        html: ownerHtml({ fname, lname, email, phone, quoteId, eventType, eventDate, venue, guests, hours, preferredStyle, appetizers, dessert, coffeeTea, barType, notes, packages, barQuote }),
       }),
     ]);
-
-    if (!customerRes.ok || !ownerRes.ok) {
-      const err = await (customerRes.ok ? ownerRes : customerRes).text();
-      console.error('Resend error:', err);
-      return res.status(500).json({ error: 'Email failed' });
-    }
 
     return res.status(200).json({ ok: true });
   } catch (err) {
