@@ -13,24 +13,24 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const [quotesRes, eventsRes] = await Promise.all([
-    supabaseAdmin.from('quotes').select('converted, created_at').is('deleted_at', null),
+    supabaseAdmin.from('quotes').select('converted, created_at, source, converted_at').is('deleted_at', null),
     supabaseAdmin.from('events').select(`
       status, created_at,
       thank_you_email_sent, photos_received, rentals_reconciled,
       staff_hours_reviewed, testimonial_received, added_to_portfolio,
-      event_days(event_date, guests)
+      event_days(event_date, guests, service_style)
     `).is('deleted_at', null),
   ]);
 
   const quotes = quotesRes.data || [];
   const events = eventsRes.data || [];
 
-  // Lead funnel
+  // ── Lead funnel ──────────────────────────────────────────────────────────
   const totalLeads = quotes.length;
   const convertedLeads = quotes.filter(q => q.converted).length;
   const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
 
-  // Leads by month (last 6 months)
+  // ── Leads by month (last 6 months) ───────────────────────────────────────
   const now = new Date();
   const leadsByMonth = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
@@ -42,14 +42,38 @@ export async function GET(req: NextRequest) {
     return { label, count };
   });
 
-  // Pipeline by status
+  // ── Win rate by source ───────────────────────────────────────────────────
+  const src: Record<string, { total: number; converted: number }> = {
+    form: { total: 0, converted: 0 },
+    manual: { total: 0, converted: 0 },
+  };
+  quotes.forEach(q => {
+    const key = q.source === 'manual' ? 'manual' : 'form';
+    src[key].total++;
+    if (q.converted) src[key].converted++;
+  });
+  const winRateBySource = [
+    { source: 'Quote Form', ...src.form, rate: src.form.total > 0 ? Math.round(src.form.converted / src.form.total * 100) : null },
+    { source: 'Manual Entry', ...src.manual, rate: src.manual.total > 0 ? Math.round(src.manual.converted / src.manual.total * 100) : null },
+  ];
+
+  // ── Avg lead-to-booking time (days) ─────────────────────────────────────
+  const bookingTimes = quotes
+    .filter(q => q.converted && q.converted_at && q.created_at)
+    .map(q => Math.round((new Date(q.converted_at).getTime() - new Date(q.created_at).getTime()) / 864e5))
+    .filter(d => d >= 0);
+  const avgDaysToBook = bookingTimes.length > 0
+    ? Math.round(bookingTimes.reduce((s, d) => s + d, 0) / bookingTimes.length)
+    : null;
+
+  // ── Pipeline by status ───────────────────────────────────────────────────
   const statusOrder = ['New', 'Booked', 'Menu Development', 'EO', 'Completed', 'Lost'];
   const pipeline = statusOrder.map(s => ({
     status: s,
     count: events.filter(e => e.status === s).length,
   }));
 
-  // Upcoming events (next 30/60/90 days)
+  // ── Upcoming events (next 30/60/90 days) ─────────────────────────────────
   const upcoming = [30, 60, 90].map(days => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + days);
@@ -65,7 +89,7 @@ export async function GET(req: NextRequest) {
     return { days, count };
   });
 
-  // Post-event follow-through (Completed events)
+  // ── Post-event follow-through ─────────────────────────────────────────────
   const completed = events.filter(e => e.status === 'Completed');
   const postEventFields = ['thank_you_email_sent', 'photos_received', 'rentals_reconciled', 'staff_hours_reviewed', 'testimonial_received', 'added_to_portfolio'] as const;
   const postEventHealth = completed.length > 0
@@ -77,31 +101,52 @@ export async function GET(req: NextRequest) {
       )
     : null;
 
-  // Average guests
-  const allDays = events.flatMap(e => (e.event_days as { guests: number }[]) || []);
+  // ── Event profile ─────────────────────────────────────────────────────────
+  const allDays = events.flatMap(e => (e.event_days as { guests: number; service_style: string; event_date: string }[]) || []);
   const avgGuests = allDays.length > 0
     ? Math.round(allDays.reduce((s, d) => s + (d.guests || 0), 0) / allDays.length)
     : null;
 
-  // Most popular style
   const styleCounts: Record<string, number> = {};
-  allDays.forEach((d: { guests: number } & Record<string, unknown>) => {
-    const style = String((d as Record<string, unknown>).service_style || '');
-    if (style) styleCounts[style] = (styleCounts[style] || 0) + 1;
+  allDays.forEach(d => {
+    if (d.service_style) styleCounts[d.service_style] = (styleCounts[d.service_style] || 0) + 1;
   });
   const topStyle = Object.entries(styleCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  // ── Day of week breakdown ─────────────────────────────────────────────────
+  const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dowCounts = Array(7).fill(0) as number[];
+  allDays.forEach(d => {
+    if (d.event_date) dowCounts[new Date(d.event_date + 'T12:00:00').getDay()]++;
+  });
+  const dayOfWeekBreakdown = DOW_LABELS.map((label, i) => ({ label, count: dowCounts[i] }));
+
+  // ── Revenue forecast ──────────────────────────────────────────────────────
+  const activeStatuses = new Set(['New', 'Booked', 'Menu Development', 'EO']);
+  const activeEvents = events.filter(e => activeStatuses.has(e.status));
+  const pipelineGuests = activeEvents.flatMap(e => (e.event_days as { guests: number }[]) || []).reduce((s, d) => s + (d.guests || 0), 0);
+  // Rough: $65 food + ~$15 staffing avg, ×1.21 for service fee + tax = ~$97/guest baseline
+  const estimatedFoodRevenue = pipelineGuests * 65;
 
   return NextResponse.json({
     totalLeads,
     convertedLeads,
     conversionRate,
     leadsByMonth,
+    winRateBySource,
+    avgDaysToBook,
     pipeline,
     upcoming,
     postEventHealth,
     avgGuests,
     topStyle,
     completedCount: completed.length,
-    activeCount: events.filter(e => !['Completed', 'Lost'].includes(e.status)).length,
+    activeCount: activeEvents.length,
+    dayOfWeekBreakdown,
+    revenueForecast: {
+      activeEvents: activeEvents.length,
+      pipelineGuests,
+      estimatedFoodRevenue,
+    },
   });
 }

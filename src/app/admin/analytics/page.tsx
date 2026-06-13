@@ -7,6 +7,8 @@ type Stats = {
   convertedLeads: number;
   conversionRate: number;
   leadsByMonth: { label: string; count: number }[];
+  winRateBySource: { source: string; total: number; converted: number; rate: number | null }[];
+  avgDaysToBook: number | null;
   pipeline: { status: string; count: number }[];
   upcoming: { days: number; count: number }[];
   postEventHealth: number | null;
@@ -14,12 +16,22 @@ type Stats = {
   topStyle: string | null;
   completedCount: number;
   activeCount: number;
+  dayOfWeekBreakdown: { label: string; count: number }[];
+  revenueForecast: { activeEvents: number; pipelineGuests: number; estimatedFoodRevenue: number };
 };
 
 const PIPELINE_COLORS: Record<string, string> = {
   New: '#2d5a9e', Booked: '#785e36', 'Menu Development': '#b45309',
   EO: '#6d28d9', Completed: '#38614a', Lost: '#aaa292',
 };
+
+const DOW_COLORS: Record<string, string> = {
+  Fri: '#97784c', Sat: '#785e36', Sun: '#6d28d9',
+};
+
+function fmtMoney(n: number) {
+  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -31,7 +43,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function KpiGrid({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 0 }}>{children}</div>;
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>{children}</div>;
 }
 
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -81,6 +93,27 @@ function HorizontalBar({ label, value, total, color }: { label: string; value: n
   );
 }
 
+function SourceRow({ source, total, converted, rate }: { source: string; total: number; converted: number; rate: number | null }) {
+  const pct = rate ?? 0;
+  const color = pct >= 50 ? 'var(--green)' : pct >= 25 ? 'var(--brass)' : '#b45309';
+  return (
+    <div style={{ padding: '12px 0', borderBottom: '1px solid var(--paper-3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-2)' }}>{source}</span>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{converted}/{total} converted</span>
+          <span style={{ fontFamily: 'var(--serif)', fontSize: '1.3rem', fontWeight: 500, color: rate !== null ? color : 'var(--ink-4)' }}>
+            {rate !== null ? `${rate}%` : '—'}
+          </span>
+        </div>
+      </div>
+      <div style={{ height: 5, background: 'var(--paper-3)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.5s' }} />
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,6 +144,7 @@ export default function AnalyticsPage() {
         <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.75rem', fontWeight: 500 }}>Analytics</h1>
       </div>
 
+      {/* ── Lead Funnel ─────────────────────────────────────────────────── */}
       <Section title="Lead Funnel">
         <KpiGrid>
           <Kpi label="Total Leads" value={String(stats.totalLeads)} sub="all time" />
@@ -121,14 +155,46 @@ export default function AnalyticsPage() {
             sub="leads → events"
             color={stats.conversionRate >= 50 ? 'var(--green)' : stats.conversionRate >= 25 ? 'var(--brass)' : '#b45309'}
           />
-          <Kpi label="Unconverted" value={String(stats.totalLeads - stats.convertedLeads)} sub="still in leads tab" />
+          <Kpi
+            label="Avg Days to Book"
+            value={stats.avgDaysToBook !== null ? String(stats.avgDaysToBook) : '—'}
+            sub={stats.avgDaysToBook !== null ? 'lead to conversion' : 'needs converted_at column'}
+            color={stats.avgDaysToBook !== null ? (stats.avgDaysToBook <= 7 ? 'var(--green)' : stats.avgDaysToBook <= 21 ? 'var(--brass)' : '#b45309') : 'var(--ink-4)'}
+          />
         </KpiGrid>
       </Section>
 
+      {/* ── Win Rate by Source ──────────────────────────────────────────── */}
+      <Section title="Win Rate by Source">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="card" style={{ padding: '1.2rem 1.4rem' }}>
+            {stats.winRateBySource.map(s => (
+              <SourceRow key={s.source} {...s} />
+            ))}
+            {stats.winRateBySource.every(s => s.total === 0) && (
+              <div style={{ fontSize: 13, color: 'var(--ink-4)', textAlign: 'center', padding: '1rem 0' }}>
+                No leads yet — run SQL migration to tag sources
+              </div>
+            )}
+          </div>
+          <div className="card" style={{ padding: '1.2rem 1.4rem' }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 8 }}>What this tells you</div>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.65, margin: 0 }}>
+              Compare how well the public quote form converts vs. leads you enter manually from phone calls or referrals. A higher manual rate often means those clients are warmer — they sought you out directly.
+            </p>
+            <div style={{ marginTop: '1rem', padding: '10px 14px', background: 'var(--paper-2)', borderRadius: 'var(--r-sm)', fontSize: 12, color: 'var(--ink-3)' }}>
+              New manual leads are tagged automatically. Run <code style={{ background: 'var(--paper-3)', padding: '1px 5px', borderRadius: 3 }}>ALTER TABLE quotes ADD COLUMN source text DEFAULT 'form'</code> to enable tracking.
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Leads by Month ──────────────────────────────────────────────── */}
       <Section title="Leads by Month (Last 6 Months)">
         <BarChart data={stats.leadsByMonth} />
       </Section>
 
+      {/* ── Pipeline ────────────────────────────────────────────────────── */}
       <Section title="Pipeline">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div className="card" style={{ padding: '1.2rem 1.4rem' }}>
@@ -144,6 +210,75 @@ export default function AnalyticsPage() {
         </div>
       </Section>
 
+      {/* ── Revenue Forecast ─────────────────────────────────────────────── */}
+      <Section title="Revenue Forecast">
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+          <div className="card" style={{ padding: '1.4rem 1.6rem' }}>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>Active Pipeline</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '2rem', fontWeight: 500, color: 'var(--brass)' }}>{stats.revenueForecast.activeEvents}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>events in progress</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>Expected Guests</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '2rem', fontWeight: 500, color: 'var(--ink)' }}>{stats.revenueForecast.pipelineGuests.toLocaleString()}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>across all active events</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>Est. Food Revenue</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '2rem', fontWeight: 500, color: 'var(--green)' }}>
+                  {stats.revenueForecast.pipelineGuests > 0 ? fmtMoney(stats.revenueForecast.estimatedFoodRevenue) : '—'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>$65/guest · food only</div>
+              </div>
+            </div>
+            <div style={{ padding: '10px 14px', background: 'var(--paper-2)', borderRadius: 'var(--r-sm)', fontSize: 12, color: 'var(--ink-3)', borderLeft: '3px solid var(--brass-lt)' }}>
+              Excludes staffing, bar, add-ons, service fee, and tax. Connect Square to see actual invoice totals here.
+            </div>
+          </div>
+          <div className="card" style={{ padding: '1.2rem 1.4rem' }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 8 }}>Coming with Square</div>
+            {['Confirmed invoice totals', 'Deposit vs. balance due', 'Monthly revenue trend', 'Year-over-year growth'].map(item => (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--paper-2)', fontSize: 12, color: 'var(--ink-3)' }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--brass-lt)', flexShrink: 0 }} />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Day of Week ──────────────────────────────────────────────────── */}
+      <Section title="Events by Day of Week">
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+          <BarChart
+            data={stats.dayOfWeekBreakdown}
+            colorKey={DOW_COLORS}
+          />
+          <div className="card" style={{ padding: '1.2rem 1.4rem' }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 12 }}>Top Days</div>
+            {stats.dayOfWeekBreakdown
+              .filter(d => d.count > 0)
+              .sort((a, b) => b.count - a.count)
+              .slice(0, 4)
+              .map((d, i) => (
+                <div key={d.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--paper-2)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 10, color: 'var(--ink-4)', width: 16, textAlign: 'right' }}>#{i + 1}</span>
+                    {d.label}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{d.count}</span>
+                </div>
+              ))}
+            {stats.dayOfWeekBreakdown.every(d => d.count === 0) && (
+              <div style={{ fontSize: 12, color: 'var(--ink-4)', textAlign: 'center', padding: '1rem 0' }}>No event data yet</div>
+            )}
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Upcoming Events ──────────────────────────────────────────────── */}
       <Section title="Upcoming Events">
         <KpiGrid>
           {stats.upcoming.map(u => (
@@ -152,6 +287,7 @@ export default function AnalyticsPage() {
         </KpiGrid>
       </Section>
 
+      {/* ── Event Profile ────────────────────────────────────────────────── */}
       <Section title="Event Profile">
         <KpiGrid>
           {stats.avgGuests !== null && <Kpi label="Avg Guest Count" value={String(stats.avgGuests)} sub="across all event days" />}
@@ -160,6 +296,7 @@ export default function AnalyticsPage() {
         </KpiGrid>
       </Section>
 
+      {/* ── Post-Event Follow-Through ─────────────────────────────────────── */}
       {stats.postEventHealth !== null && (
         <Section title="Post-Event Follow-Through">
           <div className="card" style={{ padding: '1.2rem 1.4rem', maxWidth: 480 }}>

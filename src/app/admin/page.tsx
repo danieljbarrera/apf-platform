@@ -230,7 +230,7 @@ function ConvertModal({ lead, onClose, onConverted, authFetch }: {
     });
     const newEvent = await res.json();
     if (!res.ok) { setError(newEvent.error || 'Failed to create event'); setSaving(false); return; }
-    await authFetch('/api/admin/leads', { method: 'PATCH', body: JSON.stringify({ id: lead.id, converted: true }) });
+    await authFetch('/api/admin/leads', { method: 'PATCH', body: JSON.stringify({ id: lead.id, converted: true, converted_at: new Date().toISOString() }) });
     onConverted(newEvent.id);
   }
 

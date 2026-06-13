@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     include_dessert: !!include_dessert,
     include_coffee: !!include_coffee,
     converted: false,
+    source: 'manual',
   }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
