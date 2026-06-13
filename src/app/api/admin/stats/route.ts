@@ -13,13 +13,13 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const [quotesRes, eventsRes] = await Promise.all([
-    supabaseAdmin.from('quotes').select('converted, created_at'),
+    supabaseAdmin.from('quotes').select('converted, created_at').is('deleted_at', null),
     supabaseAdmin.from('events').select(`
       status, created_at,
       thank_you_email_sent, photos_received, rentals_reconciled,
       staff_hours_reviewed, testimonial_received, added_to_portfolio,
       event_days(event_date, guests)
-    `),
+    `).is('deleted_at', null),
   ]);
 
   const quotes = quotesRes.data || [];

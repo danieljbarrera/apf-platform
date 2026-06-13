@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     .from('quotes')
     .select('*')
     .eq('converted', false)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
