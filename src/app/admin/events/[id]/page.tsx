@@ -294,7 +294,10 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [compact, setCompact] = useState(false);
+  const [compact, setCompact] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return JSON.parse(localStorage.getItem('apf-event-compact') || 'false'); } catch { return false; }
+  });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
@@ -318,6 +321,8 @@ export default function EventDetailPage() {
   useEffect(() => {
     if (event?.client_names) document.title = `${String(event.client_names)} | APF Admin`;
   }, [event?.client_names]);
+
+  useEffect(() => { localStorage.setItem('apf-event-compact', JSON.stringify(compact)); }, [compact]);
 
   const patch = useCallback((updates: Record<string, unknown>) => {
     setEvent(prev => prev ? { ...prev, ...updates } : prev);
@@ -367,17 +372,13 @@ export default function EventDetailPage() {
       <div className="event-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.9rem', fontWeight: 500, marginBottom: 6 }}>{String(event.client_names)}</h1>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            {event.planner_name ? <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>Planner: <strong>{String(event.planner_name)}</strong></span> : null}
-            {event.planner_email ? <span style={{ fontSize: 13, color: 'var(--brass)' }}>{String(event.planner_email)}</span> : null}
-          </div>
         </div>
         <div className="event-header-actions no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
             {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? '✓ Saved' : ''}
           </span>
           <button
-            onClick={() => setCompact(c => !c)}
+            onClick={() => setCompact((c: boolean) => !c)}
             title="Toggle compact checklist view"
             style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-3)', fontFamily: 'var(--sans)' }}
           >
@@ -398,20 +399,31 @@ export default function EventDetailPage() {
 
       {/* Client contact */}
       <div className="card" style={{ padding: '1rem 1.4rem', marginBottom: '1.25rem' }}>
-        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 10 }}>Client Contact</div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <div style={{ fontSize: 11, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Email</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="email" value={event.client_email ? String(event.client_email) : ''} onChange={e => patch({ client_email: e.target.value || null })} placeholder="client@example.com" style={{ flex: 1 }} />
-              {!!event.client_email && <a href={`mailto:${String(event.client_email)}`} title="Send email" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✉</a>}
+        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 10 }}>Contacts</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Client Email</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="email" value={event.client_email ? String(event.client_email) : ''} onChange={e => patch({ client_email: e.target.value || null })} placeholder="client@example.com" style={{ flex: 1, minWidth: 0 }} />
+              {!!event.client_email && <a href={`mailto:${String(event.client_email)}`} title="Email client" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✉</a>}
             </div>
           </div>
-          <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontSize: 11, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Phone</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="tel" value={event.client_phone ? String(event.client_phone) : ''} onChange={e => patch({ client_phone: e.target.value || null })} placeholder="(415) 000-0000" style={{ flex: 1 }} />
-              {!!event.client_phone && <a href={`tel:${String(event.client_phone)}`} title="Call" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✆</a>}
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Client Phone</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="tel" value={event.client_phone ? String(event.client_phone) : ''} onChange={e => patch({ client_phone: e.target.value || null })} placeholder="(415) 000-0000" style={{ flex: 1, minWidth: 0 }} />
+              {!!event.client_phone && <a href={`tel:${String(event.client_phone)}`} title="Call client" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✆</a>}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Planner Name</div>
+            <input type="text" value={event.planner_name ? String(event.planner_name) : ''} onChange={e => patch({ planner_name: e.target.value || null })} placeholder="Optional" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Planner Email</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="email" value={event.planner_email ? String(event.planner_email) : ''} onChange={e => patch({ planner_email: e.target.value || null })} placeholder="planner@example.com" style={{ flex: 1, minWidth: 0 }} />
+              {!!event.planner_email && <a href={`mailto:${String(event.planner_email)}`} title="Email planner" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✉</a>}
             </div>
           </div>
         </div>
@@ -469,7 +481,7 @@ export default function EventDetailPage() {
                             type="date"
                             value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
                             onChange={e => patch({ [field.key]: e.target.value || null })}
-                            style={{ width: 'auto', fontSize: 12, padding: '3px 6px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
+                            style={{ width: 148, fontSize: 13, padding: '5px 8px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
                           />
                           {!!event[field.key] && (
                             <button

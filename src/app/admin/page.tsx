@@ -224,7 +224,7 @@ function ConvertModal({ lead, onClose, onConverted, authFetch }: {
     const res = await authFetch('/api/admin/events', {
       method: 'POST',
       body: JSON.stringify({
-        event: { client_names: clientNames, status: 'New' },
+        event: { client_names: clientNames, status: 'New', client_email: lead.email || null, client_phone: lead.phone || null },
         days: [{ event_date: lead.event_date, venue: venue.trim(), guests: lead.guests, service_style: lead.preferred_style, sort_order: 0 }],
       }),
     });
@@ -270,7 +270,7 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
     event_date: '', guests: '', hours: '5',
     preferred_style: 'Buffet', bar_package: 'None',
     appetizer_count: '0', include_dessert: false, include_coffee: false,
-    notes: '', send_email: false,
+    notes: '', send_email: false, source: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -351,9 +351,18 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
               })}
             </div>
           </div>
+          <div style={row}>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}>
+              <label>Source</label>
+              <select value={form.source} onChange={e => set('source', e.target.value)}>
+                <option value="">— Unknown —</option>
+                {['Referral', 'Instagram', 'Google', 'Venue / Planner', 'Walk-in', 'Other'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
           <div className="field" style={{ marginBottom: 14 }}>
             <label>Notes</label>
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Source, special requests, anything relevant…" />
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Special requests, anything relevant…" />
           </div>
           <div style={{ background: form.send_email ? 'var(--green-lt)' : 'var(--paper-2)', border: `1px solid ${form.send_email ? '#c4dccd' : 'var(--rule)'}`, borderRadius: 'var(--r-md)', padding: '12px 14px', marginBottom: 16 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -466,7 +475,10 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [leadFilter, setLeadFilter] = useState<'active' | 'lost'>('active');
-  const [alertDismissed, setAlertDismissed] = useState(false);
+  const [alertDismissed, setAlertDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('apf-alert-dismissed') === '1';
+  });
 
   const [search, setSearch] = useState('');
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
@@ -659,7 +671,7 @@ export default function AdminDashboard() {
               </span>
             ))}
           </div>
-          <button onClick={() => setAlertDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 18, lineHeight: 1, flexShrink: 0, fontFamily: 'var(--sans)' }}>×</button>
+          <button onClick={() => { setAlertDismissed(true); sessionStorage.setItem('apf-alert-dismissed', '1'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 18, lineHeight: 1, flexShrink: 0, fontFamily: 'var(--sans)' }}>×</button>
         </div>
       )}
 
@@ -880,7 +892,10 @@ export default function AdminDashboard() {
                           <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</div>
                           <TrashBtn onClick={() => softDelete('lead', String(lead.id))} />
                         </div>
-                        {!!lead.email && <div style={{ fontSize: 12, color: 'var(--brass)', marginBottom: 4 }}>{String(lead.email)}</div>}
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                          {!!lead.email && <a href={`mailto:${String(lead.email)}`} style={{ fontSize: 12, color: 'var(--brass)', textDecoration: 'none' }}>{String(lead.email)}</a>}
+                          {!!lead.phone && <a href={`tel:${String(lead.phone)}`} style={{ fontSize: 12, color: 'var(--ink-3)', textDecoration: 'none' }}>{String(lead.phone)}</a>}
+                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmt(lead.event_date ? String(lead.event_date) : null)}</span>
                           {rel && <span style={{ fontSize: 10, color: 'var(--brass)', background: 'var(--paper-2)', borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{rel}</span>}
@@ -924,6 +939,7 @@ export default function AdminDashboard() {
                 <tr style={{ background: 'var(--paper)' }}>
                   <PlainTh label="Name" />
                   <PlainTh label="Email" />
+                  <PlainTh label="Phone" />
                   <SortTh label="Event Date" field="event_date" sort={leadSort} onToggle={() => toggleLeadSort('event_date')} />
                   <PlainTh label="Guests" />
                   <PlainTh label="Style" />
@@ -948,6 +964,7 @@ export default function AdminDashboard() {
                       <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)', animation: 'rowIn 0.15s ease' }}>
                         <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
                         <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email || '—')}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.phone || '—')}</td>
                         <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
                           {fmt(lead.event_date ? String(lead.event_date) : null)}
                           {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}

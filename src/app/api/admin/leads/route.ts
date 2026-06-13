@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     first_name, last_name, email, phone, event_date,
     guests, hours = 5, preferred_style, bar_package,
     appetizer_count = 0, include_dessert = false, include_coffee = false,
-    notes, send_email,
+    notes, send_email, source,
   } = body;
 
   const { data: quote, error } = await supabaseAdmin.from('quotes').insert({
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     include_dessert: !!include_dessert,
     include_coffee: !!include_coffee,
     converted: false,
-    source: 'manual',
+    source: source || 'manual',
   }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
