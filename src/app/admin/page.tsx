@@ -12,7 +12,6 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   Lost:             { bg: '#f4f4f4', color: '#79715f' },
 };
 
-// All boolean checklist fields across all phases
 const BOOL_FIELDS = [
   'proposal_sent', 'follow_up_needed', 'retainer_invoice_sent', 'contract_signed',
   'questionnaire_sent', 'questionnaire_received', 'revisions_needed', 'final_menu_approved',
@@ -24,6 +23,8 @@ const BOOL_FIELDS = [
   'thank_you_email_sent', 'photos_received', 'rentals_reconciled', 'staff_hours_reviewed',
   'testimonial_received', 'added_to_portfolio',
 ];
+
+type Lead = Record<string, unknown>;
 
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_COLORS[status] || { bg: '#f4f4f4', color: '#555' };
@@ -51,20 +52,105 @@ function ProgressBar({ event }: { event: Record<string, unknown> }) {
 
 function fmt(d: string | null) {
   if (!d) return '—';
-  // Handle both date-only strings and full ISO timestamps
   const dateStr = d.includes('T') ? d : d + 'T12:00:00';
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function ConvertModal({ lead, onClose, onConverted }: {
+  lead: Lead;
+  onClose: () => void;
+  onConverted: (eventId: string) => void;
+}) {
+  const [venue, setVenue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const authFetch = useCallback(async (url: string, options?: RequestInit) => {
+    const supabase = getSupabaseBrowser();
+    const { data: { session } } = await supabase.auth.getSession();
+    return fetch(url, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...options?.headers },
+    });
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!venue.trim()) { setError('Venue is required'); return; }
+    setSaving(true);
+    setError('');
+
+    const clientNames = `${lead.first_name} ${lead.last_name}`.trim();
+    const res = await authFetch('/api/admin/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: { client_names: clientNames, status: 'New' },
+        days: [{ event_date: lead.event_date, venue: venue.trim(), guests: lead.guests, service_style: lead.preferred_style, sort_order: 0 }],
+      }),
+    });
+    const newEvent = await res.json();
+    if (!res.ok) { setError(newEvent.error || 'Failed to create event'); setSaving(false); return; }
+
+    await authFetch('/api/admin/leads', {
+      method: 'PATCH',
+      body: JSON.stringify({ id: lead.id, converted: true }),
+    });
+
+    onConverted(newEvent.id);
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+      <div className="card" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 8 }}>Convert to Event</div>
+        <h2 style={{ fontFamily: 'var(--serif)', fontSize: '1.4rem', fontWeight: 500, marginBottom: 4 }}>
+          {String(lead.first_name)} {String(lead.last_name)}
+        </h2>
+        <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: '1.5rem' }}>
+          {fmt(lead.event_date ? String(lead.event_date) : null)} · {lead.guests ? `${lead.guests} guests` : ''} · {lead.preferred_style ? String(lead.preferred_style) : ''}
+          {lead.bar_package ? ` · ${lead.bar_package}` : ''}
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="field" style={{ marginBottom: '1.25rem' }}>
+            <label>Venue <span style={{ color: 'var(--brass)' }}>*</span></label>
+            <input
+              type="text"
+              value={venue}
+              onChange={e => setVenue(e.target.value)}
+              placeholder="e.g. The Ritz-Carlton, Half Moon Bay"
+              autoFocus
+            />
+          </div>
+          {error && (
+            <div style={{ background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid #e2bcbc', borderRadius: 'var(--r-sm)', padding: '9px 13px', fontSize: 13, marginBottom: '1rem' }}>
+              {error}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="btn btn-brass">
+              {saving ? 'Creating...' : 'Create Event'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState<'events' | 'leads'>('events');
   const [events, setEvents] = useState<Record<string, unknown>[]>([]);
-  const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [converting, setConverting] = useState<Lead | null>(null);
 
   const authFetch = useCallback(async (url: string) => {
     const supabase = getSupabaseBrowser();
@@ -72,19 +158,19 @@ export default function AdminDashboard() {
     return fetch(url, { headers: { Authorization: `Bearer ${session?.access_token}` } });
   }, []);
 
+  async function reload() {
+    const [evRes, leRes] = await Promise.all([
+      authFetch('/api/admin/events'),
+      authFetch('/api/admin/leads'),
+    ]);
+    const [evData, leData] = await Promise.all([evRes.json(), leRes.json()]);
+    setEvents(Array.isArray(evData) ? evData : []);
+    setLeads(Array.isArray(leData) ? leData : []);
+  }
+
   useEffect(() => {
-    async function load() {
-      const [evRes, leRes] = await Promise.all([
-        authFetch('/api/admin/events'),
-        authFetch('/api/admin/leads'),
-      ]);
-      const [evData, leData] = await Promise.all([evRes.json(), leRes.json()]);
-      setEvents(Array.isArray(evData) ? evData : []);
-      setLeads(Array.isArray(leData) ? leData : []);
-      setLoading(false);
-    }
-    load();
-  }, [authFetch]);
+    reload().then(() => setLoading(false));
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const statuses = ['All', 'New', 'Booked', 'Menu Development', 'EO', 'Completed', 'Lost'];
   const filteredEvents = statusFilter === 'All' ? events : events.filter(e => e.status === statusFilter);
@@ -104,13 +190,25 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      {/* Page header */}
+      {converting && (
+        <ConvertModal
+          lead={converting}
+          onClose={() => setConverting(null)}
+          onConverted={(eventId) => {
+            setConverting(null);
+            reload().then(() => {
+              setTab('events');
+              router.push(`/admin/events/${eventId}`);
+            });
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.75rem', fontWeight: 500 }}>Dashboard</h1>
         <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{events.length} events · {leads.length} leads</div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
         {(['events', 'leads'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--brass)' : '2px solid transparent', padding: '10px 20px', fontSize: 13, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--brass)' : 'var(--ink-3)', cursor: 'pointer', textTransform: 'capitalize', fontFamily: 'var(--sans)', marginBottom: -1, letterSpacing: '0.04em' }}>
@@ -121,7 +219,6 @@ export default function AdminDashboard() {
 
       {tab === 'events' && (
         <>
-          {/* Status filter */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
             {statuses.map(s => (
               <button key={s} onClick={() => setStatusFilter(s)} style={{ border: '1.5px solid', borderColor: statusFilter === s ? 'var(--brass)' : 'var(--rule)', background: statusFilter === s ? 'var(--brass)' : 'transparent', color: statusFilter === s ? '#fff' : 'var(--ink-3)', borderRadius: 99, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: 500, transition: 'all 0.15s' }}>
@@ -174,7 +271,7 @@ export default function AdminDashboard() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--paper)' }}>
-                {['Name', 'Email', 'Event Date', 'Guests', 'Style', 'Bar', 'Submitted'].map(h => (
+                {['Name', 'Email', 'Event Date', 'Guests', 'Style', 'Bar', 'Submitted', ''].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--rule)' }}>{h}</th>
                 ))}
               </tr>
@@ -189,10 +286,18 @@ export default function AdminDashboard() {
                   <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
                   <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>
                   <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button
+                      onClick={() => setConverting(lead)}
+                      style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+                    >
+                      Convert →
+                    </button>
+                  </td>
                 </tr>
               ))}
               {leads.length === 0 && (
-                <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No leads yet</td></tr>
+                <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No unconverted leads</td></tr>
               )}
             </tbody>
           </table>

@@ -1,92 +1,119 @@
 # All Purpose Flower — Business Platform
 
 ## What this is
-A custom business operations platform for All Purpose Flower (APF Culinary Group), a fine catering & events company in the SF Bay Area, run by the owner (the developer's wife). Website: allpurposeflowerco.com. Public site is on Wix; this platform is separate, live at https://apf-platform.vercel.app, and linked from the Wix "Get a Quote" button.
+A custom business operations platform for All Purpose Flower (APF Culinary Group), a fine catering & events company in the SF Bay Area, run by the owner (the developer's wife). Website: allpurposeflowerco.com. Public site is on Wix; this platform is separate, live at https://apf-platform.vercel.app, linked from the Wix "Get a Quote" button.
 
-Built by her husband (Dan) as a cost-saving alternative to HoneyBook + Caterease (~$2k/yr). Dan is a hobbyist builder, comfortable with React/Supabase/APIs, working iteratively with Claude.
+Built by her husband (Dan) as a cost-saving alternative to HoneyBook + Caterease (~$2k/yr). Dan is comfortable with React/Supabase/APIs, working iteratively with Claude.
 
 ## Roadmap (in order)
-1. **Quote app** — `index.html` ✅ live at https://apf-platform.vercel.app
-2. **Client portal** — quote approval, contract signing, Square deposit payment, event details view. Connected to quote data.
-3. **Wix website refresh** — "Get a Quote" button already points to platform. "Client Portal" button to add later.
-4. **Event execution app** — menus, ordering, staff scheduling, run-of-show, BEOs, reminders (replaces her spreadsheet)
+1. **Quote app** ✅ — live at https://apf-platform.vercel.app (`src/app/page.tsx` renders `index.html` content; quote logic is in `public/index.html`)
+2. **Admin portal** ✅ — `/admin` — dashboard (events + leads tabs), event detail with 6-phase checklist, auto-save
+3. **Document generation** — Event Order PDF from app data; Square API integration to auto-create estimates/invoices from event fields
+4. **Client portal** — magic-link page at `/client/[token]` — view proposal, approve, pay Square deposit
+5. **Wix website refresh** — "Client Portal" button to add alongside "Get a Quote"
 
-## Stack (all live)
-- **Single-file HTML** — `index.html` for the quote app; migrate to React as platform grows
-- **Supabase** — project `mgiehdjwpsqjfblxgxrv`, `quotes` table live with RLS
-- **Vercel** — https://apf-platform.vercel.app, auto-deploys from GitHub on push to `main`
+## Stack
+- **Next.js 16.2.9** — App Router, TypeScript, Tailwind CSS 4, React 19
+- **Supabase** — project `mgiehdjwpsqjfblxgxrv`. Tables: `quotes`, `events`, `event_days`
+- **Vercel** — https://apf-platform.vercel.app, auto-deploys from GitHub `main` (sometimes flaky — use `vercel --prod` if push doesn't trigger)
 - **GitHub** — `github.com/danieljbarrera/apf-platform`
-- **Gmail SMTP via nodemailer** — emails sent from `info@allpurposeflowerco.com` (Google Workspace). Resend was attempted but abandoned due to Wix DNS blocking subdomain MX records needed for domain verification.
-- **Square API** — planned for client portal (estimates, invoices, deposits). She uses Square Payroll too — out of scope.
-
-## Vercel env vars (never put in code)
-- `SUPABASE_URL` — https://mgiehdjwpsqjfblxgxrv.supabase.co
-- `SUPABASE_SERVICE_ROLE_KEY` — in Vercel dashboard
-- `GMAIL_USER` — info@allpurposeflowerco.com
-- `GMAIL_APP_PASSWORD` — in Vercel dashboard (rotate at myaccount.google.com → Security → App passwords)
-
-## Serverless functions
-- `api/submit-quote.js` — inserts quote row into Supabase
-- `api/send-quote-email.js` — sends customer estimate + owner lead notification via Gmail SMTP. BCCs danieljbarrera@gmail.com on both. Reply-to header not yet added (TODO).
-
-## Email behavior
-- Customer gets: branded estimate email with all three style package totals
-- Owner (`info@allpurposeflowerco.com`) gets: lead notification with full event + contact details
-- Both BCC `danieljbarrera@gmail.com`
-- TODO: add `reply-to: info@allpurposeflowerco.com` header so client replies route correctly
+- **Gmail SMTP via nodemailer** — emails from `info@allpurposeflowerco.com` (Google Workspace app password). Resend was tried but abandoned — Wix blocks subdomain MX records needed for domain verification.
+- **Square** — currently used manually for estimates/invoices. Future: API integration to auto-create from event data.
 
 ## Deployment workflow
 ```bash
 cd ~/apf-platform
 git add -A && git commit -m "description" && git push
-# Vercel auto-deploys in ~30 seconds
+# If Vercel doesn't auto-deploy within 60s:
+vercel --prod
 ```
-To rollback: Vercel dashboard → find last good deployment → Promote to Production.
+Rollback: Vercel dashboard → last good deployment → Promote to Production.
+
+## Vercel env vars (never put in code)
+- `SUPABASE_URL` — https://mgiehdjwpsqjfblxgxrv.supabase.co
+- `SUPABASE_SERVICE_ROLE_KEY` — service role key (server-only, never exposed to browser)
+- `NEXT_PUBLIC_SUPABASE_URL` — same URL, safe for browser
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon key (browser-safe, RLS enforced)
+- `GMAIL_USER` — info@allpurposeflowerco.com
+- `GMAIL_APP_PASSWORD` — rotate at myaccount.google.com → Security → App passwords
+
+## Supabase client split (critical — do not collapse back into one file)
+- `src/lib/supabase-admin.ts` — uses `SUPABASE_SERVICE_ROLE_KEY`, **server-only** (API routes only)
+- `src/lib/supabase-browser.ts` — uses `NEXT_PUBLIC_SUPABASE_ANON_KEY`, **client components only**
+- Mixing these caused "This page couldn't load" — the service role key is undefined in the browser
+
+## Auth pattern
+- Admin logs in via Supabase Auth email/password at `/admin/login`
+- Browser holds the session via anon key; API routes verify the Bearer token server-side using `supabaseAdmin.auth.getUser(token)`
+- Admin user: `info@allpurposeflowerco.com` — managed at supabase.com/dashboard/.../auth/users
+
+## Database schema
+
+### `quotes`
+Submitted from the public quote form. RLS: INSERT-only public, no public SELECT.
+Key fields: `first_name`, `last_name`, `email`, `event_date`, `guests`, `preferred_style`, `bar_package`, `created_at`, `converted` (bool — true once promoted to an event)
+
+### `events`
+Admin-managed event records. One row per client engagement.
+Key fields: `client_names`, `status` (New/Booked/Menu Development/EO/Completed/Lost), `planner_name`, `planner_email`, `internal_notes`, plus ~31 boolean checklist fields across 6 phases (see event detail page for full list), plus date/select/text fields for each phase.
+
+### `event_days`
+Child table of `events` for multi-day events. `event_id` FK, `event_date`, `venue`, `guests`, `service_style`, `sort_order`.
 
 ## Database changes
-Always add new columns in Supabase SQL editor BEFORE pushing code that references them:
+Always add columns in Supabase SQL editor BEFORE pushing code that references them:
 ```sql
-ALTER TABLE quotes ADD COLUMN new_field text;
+ALTER TABLE events ADD COLUMN new_field text;
 ```
-Columns are nullable by default — old rows unaffected.
+Columns are nullable by default — existing rows unaffected.
 
-## Supabase free tier warning
-Free projects pause after 1 week of inactivity. Upgrade to Pro ($25/mo) once real leads start coming in, or visit the dashboard periodically to keep it active.
+## Email behavior
+- Customer gets: branded estimate with all three style package totals
+- Owner (`info@allpurposeflowerco.com`) gets: lead notification with full event + contact details
+- Both BCC `danieljbarrera@gmail.com`
+- TODO: add `Reply-To: info@allpurposeflowerco.com` so client replies route correctly
 
-## Security notes
-- NO secrets in client-side code. All keys in Vercel env vars behind serverless endpoints.
-- Supabase `quotes` table: RLS enabled, INSERT-only public policy. No public SELECT.
-- Admin access: use Supabase Auth, never a hardcoded password.
+## Admin portal structure
+- `src/app/admin/layout.tsx` — auth guard, top nav, sign-out. `'use client'`.
+- `src/app/admin/page.tsx` — dashboard: Events tab (status filter chips, checklist progress bar) + Leads tab (with Convert to Event button)
+- `src/app/admin/events/[id]/page.tsx` — event detail: status dropdown, event day cards, 6-phase checklist (auto-saves on 600ms debounce), internal notes
+- `src/app/api/admin/events/route.ts` — GET all events (with event_days), POST new event
+- `src/app/api/admin/events/[id]/route.ts` — GET single event, PATCH event fields
+- `src/app/api/admin/leads/route.ts` — GET all quotes (excludes converted)
 
-## Pricing model (verified to the penny against Square estimate #2687)
-Config lives in `PRICING` object at top of `index.html`.
+## Checklist phases (event detail)
+1. **Booking** — proposal sent, follow-up, retainer invoice, retainer paid, contract signed
+2. **Planning** — questionnaire, tasting, draft menu, revisions, final menu approved
+3. **Rentals** — pull list, quote, approval, delivery confirmed
+4. **Event Order** — EO draft, staffing, logistics, final EO sent, approved
+5. **Pre-Event** — final invoice, final payment, guest count, vendor meals, allergies, load list, staffing roster, timeline, bar list, internal meeting, captain assigned
+6. **Post-Event** — thank you email, photos, rentals reconciled, staff hours, testimonial, added to portfolio
 
-- **Food:** $65/guest flat, all styles. Composition differs:
-  - Buffet & Family Style: 1 salad, 2 mains, 3 sides
-  - Plated: 2-course, 1 starter, 1 main (2 proteins + 1 vegetarian option)
-- **Staffing** (the style-dependent cost):
-  - Waitstaff ratio — Buffet 1:25, Family Style 1:13, Plated 1:10
-  - **Round DOWN** (floor) on waitstaff count — matches her invoices (150/13 → 11, not 12)
-  - Waitstaff $40/hr, 1 captain $50/hr
-  - Staffing hours = event hours + 4 (setup/breakdown, always +4)
-- **Add-ons (per guest):** appetizers $3/person/each (0-6 selectable), dessert $4.75, coffee & tea $2.85
-- **Bar (quoted separately):** Soft Bar $26/guest (bartenders 1:75), Full Bar $29/guest (1:50). Client provides alcohol. Bartender cost baked into per-guest price.
-- **$5,000 event minimum** on subtotal — shown as "Event minimum" line item when applied
-- **Fees on subtotal:** sales tax 9.25%, service fee 10%, card processing 3.5% (waived for check/cash — say so on quotes)
-- **Deposit: 25%** of total
+## Documents (current state + plan)
+- **Proposals/Estimates** — currently created manually in Square. Plan: Square API button on event detail to auto-generate from event fields.
+- **Invoices** — same as above; Square handles payment collection.
+- **Event Order** — currently a Google Doc. Best candidate to generate as PDF natively from app data (all fields already exist in the events table).
 
-## Quote app UX (intentional decisions — don't undo)
-- 3-step flow: event builder → contact capture → estimate view
-- NO live dollar amounts in step 1 (lead capture strategy — they must submit contact info to see pricing). Live summary panel shows sophistication (staff counts, timeline) WITHOUT prices.
-- Step 3 shows: grand total banner first (preferred style + bar combined, all-in number), then all 3 style packages side-by-side with preferred style FIRST and flagged "Your pick", then bar detail, then next steps
-- Wording: "View My Estimate" (not "Reveal" — sounded scammy)
-- Design language: paper/cream + brass/ink, Playfair Display + Instrument Sans
-- Embedded in Wix was tried but abandoned (iframe scroll/mobile issues). Now linked directly from "Get a Quote" button.
+## Pricing model (quote app — verified against Square estimate #2687)
+- **Food:** $65/guest, all styles
+- **Staffing:** waitstaff ratio Buffet 1:25 / Family Style 1:13 / Plated 1:10; **floor** the count (matches her invoices); $40/hr waitstaff, $50/hr captain; hours = event hours + 4
+- **Add-ons per guest:** appetizers $3/each (0–6), dessert $4.75, coffee & tea $2.85
+- **Bar:** Soft Bar $26/guest (1:75 bartender), Full Bar $29/guest (1:50)
+- **$5,000 event minimum** applied to subtotal
+- **Fees:** sales tax 9.25%, service fee 10%, card processing 3.5% (waived for check/cash)
+- **Deposit:** 25% of total
 
-## Open questions to confirm with the owner
-- Waitstaff floor-rounding: intentional policy or one-off? (floor matches invoice; ceil is safer margin)
-- Deposit on bar: currently 25% of combined total — does she deposit bar separately?
-- Coffee & tea quantity: her invoice billed at 125 of 150 guests — her judgment call per event? (app currently bills at full guest count)
+## Quote app UX (intentional — don't undo)
+- 3-step: event builder → contact capture → estimate reveal
+- No prices shown in step 1 (lead capture strategy)
+- "View My Estimate" wording (not "Reveal" — tested as too salesy)
+- Direct link from Wix (iframe embed abandoned — scroll/mobile issues)
 
-## Workflow context
-Dan has a workflow map from the owner (end-to-end event process). Ask for it before designing portal/ops features.
+## Supabase free tier
+Projects pause after 1 week of inactivity. Visit the dashboard periodically or upgrade to Pro ($25/mo) once real leads come in.
+
+## Open questions (confirm with owner)
+- Waitstaff floor-rounding: policy or one-off?
+- Bar deposit: 25% of combined total, or deposited separately?
+- Coffee & tea: full guest count or her judgment per event?
+- Square API: does she want estimates/invoices auto-generated, or prefer manual control?
