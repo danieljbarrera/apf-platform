@@ -177,6 +177,116 @@ function ConvertModal({ lead, onClose, onConverted }: {
   );
 }
 
+function AddLeadModal({ onClose, onSaved, authFetch }: {
+  onClose: () => void;
+  onSaved: () => void;
+  authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
+}) {
+  const [form, setForm] = useState({
+    first_name: '', last_name: '', email: '', phone: '',
+    event_date: '', guests: '', hours: '5',
+    preferred_style: 'Buffet', bar_package: 'None',
+    appetizer_count: '0', include_dessert: false, include_coffee: false,
+    notes: '', send_email: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function set(k: string, v: unknown) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.first_name || !form.last_name || !form.event_date || !form.guests || !form.preferred_style) {
+      setError('First name, last name, event date, guests, and style are required.'); return;
+    }
+    if (form.send_email && !form.email) {
+      setError('Email address is required to send an estimate.'); return;
+    }
+    setSaving(true); setError('');
+    const res = await authFetch('/api/admin/leads', { method: 'POST', body: JSON.stringify(form) });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || 'Failed to save lead'); setSaving(false); return; }
+    onSaved();
+  }
+
+  const fieldStyle = { marginBottom: 14 };
+  const row = { display: 'flex', gap: 12 } as React.CSSProperties;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem', overflowY: 'auto' }}>
+      <div className="card" style={{ width: '100%', maxWidth: 560, padding: '2rem', margin: 'auto' }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 8 }}>Add Lead Manually</div>
+        <h2 style={{ fontFamily: 'var(--serif)', fontSize: '1.35rem', fontWeight: 500, marginBottom: '1.25rem' }}>New Lead</h2>
+        <form onSubmit={handleSubmit}>
+          <div style={row}>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>First name *</label><input value={form.first_name} onChange={e => set('first_name', e.target.value)} autoFocus /></div>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Last name *</label><input value={form.last_name} onChange={e => set('last_name', e.target.value)} /></div>
+          </div>
+          <div style={row}>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Email</label><input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="for estimate email" /></div>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Phone</label><input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+          </div>
+          <div style={row}>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Event date *</label><input type="date" value={form.event_date} onChange={e => set('event_date', e.target.value)} /></div>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Guests *</label><input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} /></div>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Hours</label><input type="number" min="1" max="16" value={form.hours} onChange={e => set('hours', e.target.value)} /></div>
+          </div>
+          <div style={row}>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}>
+              <label>Service style *</label>
+              <select value={form.preferred_style} onChange={e => set('preferred_style', e.target.value)}>
+                {['Buffet', 'Family Style', 'Plated'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}>
+              <label>Bar</label>
+              <select value={form.bar_package} onChange={e => set('bar_package', e.target.value)}>
+                {['None', 'Soft Bar', 'Full Bar'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={row}>
+            <div className="field" style={{ ...fieldStyle, flex: 1 }}>
+              <label>Appetizers (count)</label>
+              <select value={form.appetizer_count} onChange={e => set('appetizer_count', e.target.value)}>
+                {['0','1','2','3','4','5','6'].map(n => <option key={n}>{n}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 22 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.include_dessert} onChange={e => set('include_dessert', e.target.checked)} />
+                Dessert
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.include_coffee} onChange={e => set('include_coffee', e.target.checked)} />
+                Coffee &amp; Tea
+              </label>
+            </div>
+          </div>
+          <div className="field" style={fieldStyle}>
+            <label>Notes</label>
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Source, special requests, anything relevant…" />
+          </div>
+          <div style={{ background: form.send_email ? 'var(--green-lt)' : 'var(--paper-2)', border: `1px solid ${form.send_email ? '#c4dccd' : 'var(--rule)'}`, borderRadius: 'var(--r-md)', padding: '12px 14px', marginBottom: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.send_email} onChange={e => set('send_email', e.target.checked)} style={{ width: 15, height: 15 }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>Send estimate email to client</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>Requires email address. Sends the same branded estimate email as the quote form.</div>
+              </div>
+            </label>
+          </div>
+          {error && <div style={{ background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid #e2bcbc', borderRadius: 'var(--r-sm)', padding: '9px 13px', fontSize: 13, marginBottom: '1rem' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Cancel</button>
+            <button type="submit" disabled={saving} className="btn btn-brass">{saving ? 'Saving…' : 'Save Lead'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState<'events' | 'leads' | 'trash'>('events');
@@ -187,6 +297,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('All');
   const [converting, setConverting] = useState<Lead | null>(null);
+  const [addingLead, setAddingLead] = useState(false);
 
   const authFetch = useCallback(async (url: string, opts?: RequestInit) => {
     const supabase = getSupabaseBrowser();
@@ -277,6 +388,14 @@ export default function AdminDashboard() {
 
   return (
     <div>
+      {addingLead && (
+        <AddLeadModal
+          authFetch={authFetch}
+          onClose={() => setAddingLead(false)}
+          onSaved={() => { setAddingLead(false); reload(); }}
+        />
+      )}
+
       {converting && (
         <ConvertModal
           lead={converting}
@@ -356,6 +475,7 @@ export default function AdminDashboard() {
                   <PlainTh label="Status" />
                   <PlainTh label="Checklist" />
                   <SortTh label="Received" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />
+                  <PlainTh label="" />
                 </tr>
               </thead>
               <tbody>
@@ -390,6 +510,12 @@ export default function AdminDashboard() {
 
       {/* Leads tab */}
       {tab === 'leads' && (
+        <>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+          <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>
+            + Add Lead
+          </button>
+        </div>
         <div className="card" style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -431,6 +557,7 @@ export default function AdminDashboard() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* Trash tab */}
