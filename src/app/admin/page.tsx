@@ -614,21 +614,9 @@ export default function AdminDashboard() {
         <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{events.length} events · {leads.length} leads</div>
       </div>
 
-      {/* KPI tiles */}
+      {/* Pipeline bar */}
       {stats && (
         <>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-            <StatTile label="Lead Conversion" value={`${stats.conversionRate}%`} sub="quotes → events"
-              color={stats.conversionRate >= 50 ? 'var(--green)' : stats.conversionRate >= 25 ? 'var(--brass)' : '#b45309'} />
-            <StatTile label="Active Events" value={String(stats.activeCount)} sub="not completed or lost" />
-            <StatTile label="Next 30 Days" value={String(stats.upcoming[0]?.count ?? 0)}
-              sub={`${stats.upcoming[1]?.count ?? 0} in 60d · ${stats.upcoming[2]?.count ?? 0} in 90d`}
-              color={stats.upcoming[0]?.count > 0 ? 'var(--brass)' : 'var(--ink)'} />
-            {stats.postEventHealth !== null && (
-              <StatTile label="Post-Event Complete" value={`${stats.postEventHealth}%`} sub="of completed events"
-                color={stats.postEventHealth >= 80 ? 'var(--green)' : '#b45309'} />
-            )}
-          </div>
           <div className="card" style={{ padding: '1rem 1.4rem', marginBottom: '1.5rem' }}>
             <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 10 }}>Pipeline</div>
             <div style={{ display: 'flex', gap: 2, height: 22, borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
