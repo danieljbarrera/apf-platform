@@ -538,6 +538,7 @@ export default function AdminDashboard() {
 
   async function resendEstimate(lead: Lead) {
     if (!lead.email) { toast('No email address on this lead', 'error'); return; }
+    if (!confirm(`Resend estimate to ${String(lead.email)}?`)) return;
     setResending(String(lead.id));
     const res = await authFetch('/api/admin/leads/resend', { method: 'POST', body: JSON.stringify({ id: lead.id }) });
     setResending(null);
