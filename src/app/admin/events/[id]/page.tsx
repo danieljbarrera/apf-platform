@@ -354,8 +354,9 @@ export default function EventDetailPage() {
       <style>{`
         @media (max-width: 640px) {
           .phase-grid { grid-template-columns: 1fr !important; }
-          .field-row-side { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
-          .field-row-side input, .field-row-side select { width: 100% !important; font-size: 14px !important; padding: 7px 10px !important; }
+          .field-row-side { flex-direction: column !important; align-items: stretch !important; gap: 4px !important; }
+          .field-row-side > div { width: 100% !important; }
+          .field-row-side input, .field-row-side select { width: 100% !important; font-size: 14px !important; padding: 9px 10px !important; }
           .day-grid { grid-template-columns: 1fr !important; }
           .event-header { flex-direction: column !important; align-items: flex-start !important; }
           .event-header-actions { flex-wrap: wrap !important; }
@@ -476,12 +477,12 @@ export default function EventDetailPage() {
                     {field.type === 'date' && (
                       <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: compact ? '4px 8px' : '6px 8px' }}>
                         <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
                           <input
                             type="date"
                             value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
                             onChange={e => patch({ [field.key]: e.target.value || null })}
-                            style={{ width: 148, fontSize: 13, padding: '5px 8px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
+                            style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '7px 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
                           />
                           {!!event[field.key] && (
                             <button
