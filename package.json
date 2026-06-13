@@ -13,7 +13,8 @@
     "next": "16.2.9",
     "nodemailer": "^6.9.14",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "square": "^44.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
