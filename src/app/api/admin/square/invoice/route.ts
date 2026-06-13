@@ -150,6 +150,12 @@ export async function POST(req: NextRequest) {
           },
         ],
         deliveryMethod: 'SHARE_MANUALLY',
+        acceptedPaymentMethods: {
+          card: true,
+          squareGiftCard: false,
+          bankAccount: true,
+          buyNowPayLater: false,
+        },
       },
     });
 
