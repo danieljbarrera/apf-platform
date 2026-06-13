@@ -12,6 +12,19 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   Lost:             { bg: '#f4f4f4', color: '#79715f' },
 };
 
+// All boolean checklist fields across all phases
+const BOOL_FIELDS = [
+  'proposal_sent', 'follow_up_needed', 'retainer_invoice_sent', 'contract_signed',
+  'questionnaire_sent', 'questionnaire_received', 'revisions_needed', 'final_menu_approved',
+  'rental_pull_list_created', 'rental_quote_sent', 'rental_approved', 'rental_delivery_confirmed',
+  'eo_draft_complete', 'staffing_added', 'logistics_added', 'eo_approved',
+  'final_payment_received', 'final_guest_count_confirmed', 'vendor_meals_confirmed',
+  'allergy_list_received', 'load_list_complete', 'staffing_roster_final', 'timeline_finalized',
+  'bar_list_final', 'internal_meeting_scheduled',
+  'thank_you_email_sent', 'photos_received', 'rentals_reconciled', 'staff_hours_reviewed',
+  'testimonial_received', 'added_to_portfolio',
+];
+
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_COLORS[status] || { bg: '#f4f4f4', color: '#555' };
   return (
@@ -21,9 +34,28 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function ProgressBar({ event }: { event: Record<string, unknown> }) {
+  const done = BOOL_FIELDS.filter(f => event[f] === true).length;
+  const total = BOOL_FIELDS.length;
+  const pct = Math.round((done / total) * 100);
+  const color = pct === 100 ? '#38614a' : pct >= 60 ? '#97784c' : pct >= 30 ? '#b45309' : '#2d5a9e';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 110 }}>
+      <div style={{ flex: 1, height: 5, background: 'var(--paper-3)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.3s' }} />
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--ink-4)', whiteSpace: 'nowrap' }}>{done}/{total}</span>
+    </div>
+  );
+}
+
 function fmt(d: string | null) {
   if (!d) return '—';
-  return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Handle both date-only strings and full ISO timestamps
+  const dateStr = d.includes('T') ? d : d + 'T12:00:00';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function AdminDashboard() {
@@ -102,7 +134,7 @@ export default function AdminDashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--paper)' }}>
-                  {['Client', 'First Event Date', 'Venue', 'Guests', 'Style', 'Planner', 'Status'].map(h => (
+                  {['Client', 'First Event Date', 'Venue', 'Guests', 'Style', 'Status', 'Checklist'].map(h => (
                     <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--rule)' }}>{h}</th>
                   ))}
                 </tr>
@@ -123,8 +155,8 @@ export default function AdminDashboard() {
                       <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{totalGuests(event) || '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.service_style) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{event.planner_name ? String(event.planner_name) : '—'}</td>
                       <td style={{ padding: '12px 16px' }}><StatusBadge status={String(event.status)} /></td>
+                      <td style={{ padding: '12px 16px' }}><ProgressBar event={event} /></td>
                     </tr>
                   );
                 })}
