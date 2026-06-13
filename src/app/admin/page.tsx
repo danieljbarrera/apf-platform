@@ -143,11 +143,35 @@ function ConvertModal({ lead, onClose, onConverted }: {
   );
 }
 
+type Stats = {
+  conversionRate: number;
+  activeCount: number;
+  upcoming: { days: number; count: number }[];
+  postEventHealth: number | null;
+  pipeline: { status: string; count: number }[];
+};
+
+const PIPELINE_COLORS: Record<string, string> = {
+  New: '#2d5a9e', Booked: '#785e36', 'Menu Development': '#b45309',
+  EO: '#6d28d9', Completed: '#38614a', Lost: '#aaa292',
+};
+
+function StatTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div className="card" style={{ padding: '1.1rem 1.4rem', flex: 1, minWidth: 140 }}>
+      <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--serif)', fontSize: '2rem', fontWeight: 500, color: color || 'var(--ink)', lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState<'events' | 'leads'>('events');
   const [events, setEvents] = useState<Record<string, unknown>[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('All');
   const [converting, setConverting] = useState<Lead | null>(null);
@@ -159,13 +183,15 @@ export default function AdminDashboard() {
   }, []);
 
   async function reload() {
-    const [evRes, leRes] = await Promise.all([
+    const [evRes, leRes, stRes] = await Promise.all([
       authFetch('/api/admin/events'),
       authFetch('/api/admin/leads'),
+      authFetch('/api/admin/stats'),
     ]);
-    const [evData, leData] = await Promise.all([evRes.json(), leRes.json()]);
+    const [evData, leData, stData] = await Promise.all([evRes.json(), leRes.json(), stRes.json()]);
     setEvents(Array.isArray(evData) ? evData : []);
     setLeads(Array.isArray(leData) ? leData : []);
+    setStats(stData);
   }
 
   useEffect(() => {
@@ -204,10 +230,66 @@ export default function AdminDashboard() {
         />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.75rem', fontWeight: 500 }}>Dashboard</h1>
         <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{events.length} events · {leads.length} leads</div>
       </div>
+
+      {/* KPI tiles */}
+      {stats && (
+        <>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+            <StatTile
+              label="Lead Conversion"
+              value={`${stats.conversionRate}%`}
+              sub="quotes → events"
+              color={stats.conversionRate >= 50 ? 'var(--green)' : stats.conversionRate >= 25 ? 'var(--brass)' : '#b45309'}
+            />
+            <StatTile
+              label="Active Events"
+              value={String(stats.activeCount)}
+              sub="not completed or lost"
+            />
+            <StatTile
+              label="Next 30 Days"
+              value={String(stats.upcoming[0]?.count ?? 0)}
+              sub={`${stats.upcoming[1]?.count ?? 0} in 60d · ${stats.upcoming[2]?.count ?? 0} in 90d`}
+              color={stats.upcoming[0]?.count > 0 ? 'var(--brass)' : 'var(--ink)'}
+            />
+            {stats.postEventHealth !== null && (
+              <StatTile
+                label="Post-Event Complete"
+                value={`${stats.postEventHealth}%`}
+                sub="of completed events"
+                color={stats.postEventHealth >= 80 ? 'var(--green)' : '#b45309'}
+              />
+            )}
+          </div>
+
+          {/* Pipeline strip */}
+          <div className="card" style={{ padding: '1rem 1.4rem', marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 10 }}>Pipeline</div>
+            <div style={{ display: 'flex', gap: 2, height: 8, borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
+              {stats.pipeline.filter(p => p.count > 0).map(p => {
+                const total = stats.pipeline.reduce((s, x) => s + x.count, 0);
+                return (
+                  <div key={p.status} style={{ flex: p.count / total, background: PIPELINE_COLORS[p.status], minWidth: 4 }} title={`${p.status}: ${p.count}`} />
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {stats.pipeline.map(p => (
+                <div key={p.status} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: PIPELINE_COLORS[p.status], flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: p.count > 0 ? 'var(--ink-2)' : 'var(--ink-4)' }}>
+                    {p.status} <strong>{p.count}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
         {(['events', 'leads'] as const).map(t => (

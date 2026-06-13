@@ -52,6 +52,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
         <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.15)' }} />
         <NavLink href="/admin" active={pathname === '/admin'}>Dashboard</NavLink>
+        <NavLink href="/admin/analytics" active={pathname === '/admin/analytics'}>Analytics</NavLink>
         <div style={{ flex: 1 }} />
         <button
           onClick={handleLogout}
