@@ -201,11 +201,12 @@ function PhaseRing({ done, total }: { done: number; total: number }) {
 }
 
 function EditableDayCard({
-  day, index, total, authFetch, onSaved,
+  day, index, total, authFetch, onSaved, onDelete,
 }: {
   day: Event; index: number; total: number;
   authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
   onSaved: () => void;
+  onDelete?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
@@ -277,7 +278,14 @@ function EditableDayCard({
         <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 6 }}>
           {total > 1 ? `Day ${index + 1}` : 'Event Day'}
         </div>
-        <span style={{ fontSize: 10, color: 'var(--ink-4)', opacity: 0.7 }}>Edit</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onDelete && (
+            <button onClick={e => { e.stopPropagation(); onDelete(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: 0, fontFamily: 'var(--sans)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-4)')}>✕</button>
+          )}
+          <span style={{ fontSize: 10, color: 'var(--ink-4)', opacity: 0.7 }}>Edit</span>
+        </div>
       </div>
       <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', marginBottom: 4 }}>{fmt(String(day.event_date))}</div>
       <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 2 }}>{String(day.venue || '—')}</div>
@@ -431,7 +439,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Event days — editable */}
-      <div className="day-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 3)}, 1fr)`, gap: 12, marginBottom: '1.75rem' }}>
+      <div className="day-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 3)}, 1fr)`, gap: 12, marginBottom: days.length > 0 ? 8 : '1.75rem' }}>
         {days.map((day, i) => (
           <EditableDayCard
             key={String(day.id)}
@@ -440,8 +448,29 @@ export default function EventDetailPage() {
             total={days.length}
             authFetch={authFetch}
             onSaved={loadEvent}
+            onDelete={days.length > 1 ? async () => {
+              if (!confirm('Remove this day from the event?')) return;
+              await authFetch('/api/admin/event-days', { method: 'DELETE', body: JSON.stringify({ id: day.id }) });
+              loadEvent();
+            } : undefined}
           />
         ))}
+      </div>
+      <div style={{ marginBottom: '1.75rem' }}>
+        <button
+          onClick={async () => {
+            await authFetch('/api/admin/event-days', {
+              method: 'POST',
+              body: JSON.stringify({ event_id: id, sort_order: days.length }),
+            });
+            loadEvent();
+          }}
+          style={{ background: 'none', border: '1.5px dashed var(--rule)', borderRadius: 'var(--r-md)', padding: '8px 18px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)', width: '100%' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brass)'; e.currentTarget.style.color = 'var(--brass)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--rule)'; e.currentTarget.style.color = 'var(--ink-4)'; }}
+        >
+          + Add Day
+        </button>
       </div>
 
       {/* Checklist phases */}
