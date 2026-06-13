@@ -245,22 +245,24 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
               </select>
             </div>
           </div>
-          <div style={row}>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}>
-              <label>Appetizers (count)</label>
-              <select value={form.appetizer_count} onChange={e => set('appetizer_count', e.target.value)}>
-                {['0','1','2','3','4','5','6'].map(n => <option key={n}>{n}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 22 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.include_dessert} onChange={e => set('include_dessert', e.target.checked)} />
-                Dessert
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.include_coffee} onChange={e => set('include_coffee', e.target.checked)} />
-                Coffee &amp; Tea
-              </label>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 500, marginBottom: 8, letterSpacing: '0.04em' }}>Add-ons</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <select value={form.appetizer_count} onChange={e => set('appetizer_count', e.target.value)} style={{ fontSize: 12, padding: '6px 28px 6px 10px' }}>
+                  {['0','1','2','3','4','5','6'].map(n => <option key={n} value={n}>{n === '0' ? 'No appetizers' : `${n} appetizer${n === '1' ? '' : 's'}`}</option>)}
+                </select>
+              </div>
+              {(['include_dessert', 'include_coffee'] as const).map(key => {
+                const label = key === 'include_dessert' ? 'Dessert' : 'Coffee & Tea';
+                const active = form[key];
+                return (
+                  <button key={key} type="button" onClick={() => set(key, !active)}
+                    style={{ border: `1.5px solid ${active ? '#c4dccd' : 'var(--rule)'}`, background: active ? 'var(--green-lt)' : 'transparent', color: active ? 'var(--green)' : 'var(--ink-3)', borderRadius: 99, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: active ? 600 : 400, transition: 'all 0.15s' }}>
+                    {active ? '✓ ' : ''}{label}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="field" style={fieldStyle}>
