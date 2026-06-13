@@ -159,10 +159,13 @@ export default function EventDetailPage() {
             {event.planner_email ? <span style={{ fontSize: 13, color: 'var(--brass)' }}>{String(event.planner_email)}</span> : null}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} className="no-print">
           <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
             {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? '✓ Saved' : ''}
           </span>
+          <button onClick={() => window.print()} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
+            Print
+          </button>
           <select
             value={String(event.status)}
             onChange={e => patch({ status: e.target.value })}
@@ -170,6 +173,27 @@ export default function EventDetailPage() {
           >
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+        </div>
+      </div>
+
+      {/* Client contact */}
+      <div className="card" style={{ padding: '1rem 1.4rem', marginBottom: '1.25rem' }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 10 }}>Client Contact</div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Email</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="email" value={event.client_email ? String(event.client_email) : ''} onChange={e => patch({ client_email: e.target.value || null })} placeholder="client@example.com" style={{ flex: 1 }} />
+              {!!event.client_email && <a href={`mailto:${String(event.client_email)}`} title="Send email" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✉</a>}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-4)', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Phone</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="tel" value={event.client_phone ? String(event.client_phone) : ''} onChange={e => patch({ client_phone: e.target.value || null })} placeholder="(415) 000-0000" style={{ flex: 1 }} />
+              {!!event.client_phone && <a href={`tel:${String(event.client_phone)}`} title="Call" style={{ color: 'var(--brass)', fontSize: 16, textDecoration: 'none', flexShrink: 0 }}>✆</a>}
+            </div>
+          </div>
         </div>
       </div>
 

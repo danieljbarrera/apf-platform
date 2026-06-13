@@ -76,14 +76,18 @@ function totalGuests(event: Event) {
   return ((event.event_days as Event[]) || []).reduce((s, d) => s + (Number(d.guests) || 0), 0);
 }
 
-function urgencyStyle(event: Event): React.CSSProperties {
+function rowAccent(event: Event): React.CSSProperties {
+  const status = String(event.status);
+  const isActive = ['New', 'Booked', 'Menu Development', 'EO'].includes(status);
+  if (!isActive) return {};
+
   const day = firstDay(event);
-  if (!day || !day.event_date) return {};
+  if (!day || !day.event_date) return { borderLeft: '2px solid var(--brass-lt)' };
   const dt = new Date(String(day.event_date) + 'T12:00:00');
   const daysUntil = Math.ceil((dt.getTime() - Date.now()) / 864e5);
-  if (daysUntil < 0 || daysUntil > 30) return {};
+  if (daysUntil < 0 || daysUntil > 30) return { borderLeft: '2px solid var(--brass-lt)' };
   const done = BOOL_FIELDS.filter(f => event[f] === true).length;
-  if (done / BOOL_FIELDS.length >= 0.8) return {};
+  if (done / BOOL_FIELDS.length >= 0.8) return { borderLeft: '2px solid var(--brass-lt)' };
   if (daysUntil <= 7) return { borderLeft: '3px solid var(--red)' };
   return { borderLeft: '3px solid #d97706' };
 }
@@ -453,9 +457,12 @@ export default function AdminDashboard() {
 
   const [events, setEvents] = useState<Event[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [lostLeads, setLostLeads] = useState<Lead[]>([]);
   const [trash, setTrash] = useState<{ leads: Lead[]; events: Event[] }>({ leads: [], events: [] });
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [leadFilter, setLeadFilter] = useState<'active' | 'lost'>('active');
+  const [alertDismissed, setAlertDismissed] = useState(false);
 
   const [search, setSearch] = useState('');
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
@@ -477,15 +484,17 @@ export default function AdminDashboard() {
   }, []);
 
   async function reload() {
-    const [evRes, leRes, stRes, trRes] = await Promise.all([
+    const [evRes, leRes, stRes, trRes, lostRes] = await Promise.all([
       authFetch('/api/admin/events'),
       authFetch('/api/admin/leads'),
       authFetch('/api/admin/stats'),
       authFetch('/api/admin/trash'),
+      authFetch('/api/admin/leads?lost=true'),
     ]);
-    const [evData, leData, stData, trData] = await Promise.all([evRes.json(), leRes.json(), stRes.json(), trRes.json()]);
+    const [evData, leData, stData, trData, lostData] = await Promise.all([evRes.json(), leRes.json(), stRes.json(), trRes.json(), lostRes.json()]);
     setEvents(Array.isArray(evData) ? evData : []);
     setLeads(Array.isArray(leData) ? leData : []);
+    setLostLeads(Array.isArray(lostData) ? lostData : []);
     setStats(stData);
     setTrash({ leads: trData.leads || [], events: trData.events || [] });
   }
@@ -517,12 +526,35 @@ export default function AdminDashboard() {
     reload();
   }
 
+  async function markLeadLost(id: string) {
+    if (!confirm('Mark this lead as lost? It will be removed from the active leads list but kept in analytics.')) return;
+    await authFetch('/api/admin/leads', { method: 'PATCH', body: JSON.stringify({ id, lead_status: 'lost' }) });
+    toast('Lead marked as lost', 'info');
+    reload();
+  }
+
+  async function restoreLeadActive(id: string) {
+    await authFetch('/api/admin/leads', { method: 'PATCH', body: JSON.stringify({ id, lead_status: 'active' }) });
+    toast('Lead restored to active');
+    reload();
+  }
+
   function toggleEventSort(field: 'event_date' | 'created_at') {
     setEventSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
   }
   function toggleLeadSort(field: 'event_date' | 'created_at') {
     setLeadSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
   }
+
+  const alertEvents = events.filter(e => {
+    const day = firstDay(e);
+    if (!day || !day.event_date) return false;
+    const dt = new Date(String(day.event_date) + 'T12:00:00');
+    const daysUntil = Math.ceil((dt.getTime() - Date.now()) / 864e5);
+    if (daysUntil < 0 || daysUntil > 14) return false;
+    const done = BOOL_FIELDS.filter(f => e[f] === true).length;
+    return done / BOOL_FIELDS.length < 0.8;
+  });
 
   const q = search.toLowerCase();
 
@@ -610,6 +642,23 @@ export default function AdminDashboard() {
         </>
       )}
 
+      {/* Upcoming alert strip */}
+      {alertEvents.length > 0 && !alertDismissed && (
+        <div className="no-print" style={{ background: '#fff8ed', border: '1px solid #d97706', borderRadius: 'var(--r-md)', padding: '10px 16px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>⚠</span>
+          <div style={{ flex: 1, fontSize: 13, color: '#92400e' }}>
+            <strong>{alertEvents.length} event{alertEvents.length > 1 ? 's' : ''}</strong> within 14 days with incomplete checklists:{' '}
+            {alertEvents.map((e, i) => (
+              <span key={String(e.id)}>
+                <a href={`/admin/events/${e.id}`} style={{ color: '#92400e', fontWeight: 600 }}>{String(e.client_names)}</a>
+                {i < alertEvents.length - 1 ? ', ' : ''}
+              </span>
+            ))}
+          </div>
+          <button onClick={() => setAlertDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 18, lineHeight: 1, flexShrink: 0, fontFamily: 'var(--sans)' }}>×</button>
+        </div>
+      )}
+
       {/* Search + tabs */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 340 }}>
@@ -665,17 +714,17 @@ export default function AdminDashboard() {
                   <PlainTh label="" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody key={`events-${statusFilter}-${q}`}>
                 {loading ? <SkeletonRows cols={9} /> : filteredEvents.length === 0 ? (
                   <EmptyState icon="✦" title={search ? 'No events match your search' : statusFilter !== 'All' ? `No ${statusFilter} events` : 'No events yet'} sub={search ? 'Try a different search term' : statusFilter !== 'All' ? 'Try a different status filter' : 'Events appear here once a lead is converted'} />
                 ) : filteredEvents.map((event) => {
                   const day = firstDay(event);
                   const dayDate = day ? String(day.event_date) : null;
                   const rel = relDate(dayDate);
-                  const uStyle = urgencyStyle(event);
+                  const accent = rowAccent(event);
                   return (
                     <tr key={String(event.id)} onClick={() => router.push(`/admin/events/${event.id}`)}
-                      style={{ cursor: 'pointer', borderBottom: '1px solid var(--paper-3)', transition: 'background 0.12s', ...uStyle }}
+                      style={{ cursor: 'pointer', borderBottom: '1px solid var(--paper-3)', transition: 'background 0.12s', animation: 'rowIn 0.15s ease', ...accent }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
                       <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</td>
@@ -727,10 +776,21 @@ export default function AdminDashboard() {
       {/* Leads tab */}
       {tab === 'leads' && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-            <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>
-              + Add Lead
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem', flexWrap: 'wrap' }}>
+            {/* Active / Lost toggle */}
+            <div style={{ display: 'flex', border: '1px solid var(--rule)', borderRadius: 99, padding: 3, gap: 2 }}>
+              {(['active', 'lost'] as const).map(f => (
+                <button key={f} onClick={() => setLeadFilter(f)} style={{ borderRadius: 99, padding: '4px 14px', fontSize: 12, border: 'none', background: leadFilter === f ? (f === 'lost' ? 'var(--ink-3)' : 'var(--brass)') : 'transparent', color: leadFilter === f ? '#fff' : 'var(--ink-3)', cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: leadFilter === f ? 600 : 400 }}>
+                  {f === 'active' ? `Active (${leads.length})` : `Lost (${lostLeads.length})`}
+                </button>
+              ))}
+            </div>
+            <div style={{ flex: 1 }} />
+            {leadFilter === 'active' && (
+              <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>
+                + Add Lead
+              </button>
+            )}
           </div>
           <div className="card" style={{ overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -747,40 +807,59 @@ export default function AdminDashboard() {
                   <PlainTh label="" />
                 </tr>
               </thead>
-              <tbody>
-                {loading ? <SkeletonRows cols={9} /> : sortedLeads.length === 0 ? (
-                  <EmptyState icon="✦" title={search ? 'No leads match your search' : 'No unconverted leads'} sub={search ? 'Try a different search term' : 'New quote form submissions appear here'} />
-                ) : sortedLeads.map((lead) => {
-                  const rel = relDate(lead.event_date ? String(lead.event_date) : null);
-                  return (
-                    <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email || '—')}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
-                        {fmt(lead.event_date ? String(lead.event_date) : null)}
-                        {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{lead.guests ? String(lead.guests) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <button onClick={() => setConverting(lead)} style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                          Convert →
-                        </button>
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <TrashBtn onClick={() => softDelete('lead', String(lead.id))} />
-                      </td>
-                    </tr>
+              <tbody key={`leads-${leadFilter}-${q}`}>
+                {loading ? <SkeletonRows cols={9} /> : (() => {
+                  const displayLeads = leadFilter === 'lost' ? lostLeads : sortedLeads;
+                  if (displayLeads.length === 0) return (
+                    <EmptyState
+                      icon="✦"
+                      title={search ? 'No leads match your search' : leadFilter === 'lost' ? 'No lost leads' : 'No unconverted leads'}
+                      sub={search ? 'Try a different search term' : leadFilter === 'lost' ? 'Leads you mark as lost will appear here' : 'New quote form submissions appear here'}
+                    />
                   );
-                })}
+                  return displayLeads.map((lead) => {
+                    const rel = relDate(lead.event_date ? String(lead.event_date) : null);
+                    return (
+                      <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)', animation: 'rowIn 0.15s ease' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email || '—')}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                          {fmt(lead.event_date ? String(lead.event_date) : null)}
+                          {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
+                        </td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{lead.guests ? String(lead.guests) : '—'}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {leadFilter === 'active' ? (
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <button onClick={() => setConverting(lead)} style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                                Convert →
+                              </button>
+                              <button onClick={() => markLeadLost(String(lead.id))} title="Mark as lost" style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
+                                Lost
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => restoreLeadActive(String(lead.id))} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 500, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}>
+                              Restore
+                            </button>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 8px' }}>
+                          <TrashBtn onClick={() => softDelete('lead', String(lead.id))} />
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
-          {!loading && sortedLeads.length > 0 && (
+          {!loading && (leadFilter === 'active' ? sortedLeads : lostLeads).length > 0 && (
             <div style={{ marginTop: 12, textAlign: 'right' }}>
-              <button onClick={() => exportCSV(sortedLeads as Record<string, unknown>[], 'apf-leads.csv')}
+              <button onClick={() => exportCSV((leadFilter === 'active' ? sortedLeads : lostLeads) as Record<string, unknown>[], `apf-leads-${leadFilter}.csv`)}
                 style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
                 Export CSV
               </button>

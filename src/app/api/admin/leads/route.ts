@@ -14,13 +14,23 @@ export async function GET(req: NextRequest) {
   const user = await verifyAuth(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await supabaseAdmin
+  const lost = req.nextUrl.searchParams.get('lost') === 'true';
+
+  let query = supabaseAdmin
     .from('quotes')
     .select('*')
     .eq('converted', false)
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
+  if (lost) {
+    query = query.eq('lead_status', 'lost');
+  } else {
+    // show active leads: lead_status IS NULL (old rows) or not 'lost'
+    query = query.or('lead_status.is.null,lead_status.neq.lost');
+  }
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
@@ -171,7 +181,6 @@ export async function POST(req: NextRequest) {
       ]);
     } catch (e) {
       console.error('Email send failed:', e);
-      // don't fail the whole request — lead was saved
     }
   }
 
