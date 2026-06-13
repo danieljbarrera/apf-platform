@@ -700,9 +700,10 @@ export default function AdminDashboard() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button onClick={() => setCompact(c => !c)} style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
+              <button onClick={() => setCompact(c => !c)} className="compact-btn-desktop" style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
                 {compact ? 'Compact ✓' : 'Compact'}
               </button>
+              <style>{`.compact-btn-desktop { display: inline-flex; } @media (max-width: 640px) { .compact-btn-desktop { display: none !important; } }`}</style>
               <div style={{ flex: 1 }} />
               <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
                 + Add Event
@@ -853,7 +854,71 @@ export default function AdminDashboard() {
               </button>
             )}
           </div>
-          <div className="card" style={{ overflow: 'auto' }}>
+          {/* Mobile lead cards */}
+          <div className="event-cards-wrap">
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1,2,3].map(i => <div key={i} className="card skeleton" style={{ height: 110 }} />)}
+              </div>
+            ) : (() => {
+              const displayLeads = leadFilter === 'lost' ? lostLeads : sortedLeads;
+              if (displayLeads.length === 0) return (
+                <div className="card" style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, marginBottom: 10, opacity: 0.3 }}>✦</div>
+                  <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', color: 'var(--ink-3)' }}>
+                    {search ? 'No leads match your search' : leadFilter === 'lost' ? 'No lost leads' : 'No unconverted leads'}
+                  </div>
+                </div>
+              );
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {displayLeads.map(lead => {
+                    const rel = relDate(lead.event_date ? String(lead.event_date) : null);
+                    return (
+                      <div key={String(lead.id)} className="card" style={{ padding: '12px 14px', animation: 'rowIn 0.15s ease' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                          <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</div>
+                          <TrashBtn onClick={() => softDelete('lead', String(lead.id))} />
+                        </div>
+                        {!!lead.email && <div style={{ fontSize: 12, color: 'var(--brass)', marginBottom: 4 }}>{String(lead.email)}</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmt(lead.event_date ? String(lead.event_date) : null)}</span>
+                          {rel && <span style={{ fontSize: 10, color: 'var(--brass)', background: 'var(--paper-2)', borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{rel}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 10 }}>
+                          {[lead.guests && `${lead.guests} guests`, lead.preferred_style, lead.bar_package && lead.bar_package !== 'None' && String(lead.bar_package)].filter(Boolean).join(' · ')}
+                        </div>
+                        <div style={{ borderTop: '1px solid var(--paper-3)', paddingTop: 10, display: 'flex', gap: 8 }}>
+                          {leadFilter === 'active' ? (
+                            <>
+                              <button onClick={() => setConverting(lead)} style={{ flex: 1, background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)' }}>
+                                Convert →
+                              </button>
+                              {!!lead.email && (
+                                <button onClick={() => resendEstimate(lead)} disabled={resending === String(lead.id)} style={{ flex: 1, background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
+                                  {resending === String(lead.id) ? '…' : 'Resend'}
+                                </button>
+                              )}
+                              <button onClick={() => markLeadLost(String(lead.id))} style={{ flex: 1, background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
+                                Lost
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => restoreLeadActive(String(lead.id))} style={{ flex: 1, background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px', fontSize: 12, fontWeight: 500, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}>
+                              Restore
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Desktop lead table */}
+          <div className="event-table-wrap card" style={{ overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--paper)' }}>
@@ -872,8 +937,7 @@ export default function AdminDashboard() {
                 {loading ? <SkeletonRows cols={9} /> : (() => {
                   const displayLeads = leadFilter === 'lost' ? lostLeads : sortedLeads;
                   if (displayLeads.length === 0) return (
-                    <EmptyState
-                      icon="✦"
+                    <EmptyState icon="✦"
                       title={search ? 'No leads match your search' : leadFilter === 'lost' ? 'No lost leads' : 'No unconverted leads'}
                       sub={search ? 'Try a different search term' : leadFilter === 'lost' ? 'Leads you mark as lost will appear here' : 'New quote form submissions appear here'}
                     />
@@ -899,12 +963,7 @@ export default function AdminDashboard() {
                                 Convert →
                               </button>
                               {!!lead.email && (
-                                <button
-                                  onClick={() => resendEstimate(lead)}
-                                  disabled={resending === String(lead.id)}
-                                  title="Resend estimate email"
-                                  style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}
-                                >
+                                <button onClick={() => resendEstimate(lead)} disabled={resending === String(lead.id)} title="Resend estimate email" style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
                                   {resending === String(lead.id) ? '…' : 'Resend'}
                                 </button>
                               )}
