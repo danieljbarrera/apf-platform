@@ -8,9 +8,11 @@ Built by her husband (Dan) as a cost-saving alternative to HoneyBook + Caterease
 ## Roadmap (in order)
 1. **Quote app** ✅ — live at https://apf-platform.vercel.app (`src/app/page.tsx` renders `index.html` content; quote logic is in `public/index.html`)
 2. **Admin portal** ✅ — `/admin` — dashboard (events + leads tabs), event detail with 6-phase checklist, auto-save
-3. **Document generation** — Event Order PDF from app data; Square API integration to auto-create estimates/invoices from event fields
-4. **Client portal** — magic-link page at `/client/[token]` — view proposal, approve, pay Square deposit
-5. **Wix website refresh** — "Client Portal" button to add alongside "Get a Quote"
+3. **Event Order** ✅ — `/admin/events/[id]/eo` — live editable document with auto-save; Print/Save PDF via browser; fields: menu, timeline, allergies, bar, staffing, load-in time
+4. **Client portal** — magic-link page at `/client/[token]` — view proposal/EO/event details, approve, pay Square deposit
+5. **Square API** — auto-create customers + invoices (deposit + balance) from event data; webhook to auto-update status on payment; import existing Square estimates as leads
+6. **Staff portal** — `/staff` route; `profiles` table; `event_staff` join table; staff view of EO and assigned events
+7. **Wix website refresh** — "Client Portal" button to add alongside "Get a Quote"
 
 ## Stack
 - **Next.js 16.2.9** — App Router, TypeScript, Tailwind CSS 4, React 19
