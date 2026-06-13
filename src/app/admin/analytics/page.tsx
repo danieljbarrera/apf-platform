@@ -91,6 +91,8 @@ export default function AnalyticsPage() {
     return fetch(url, { headers: { Authorization: `Bearer ${session?.access_token}` } });
   }, []);
 
+  useEffect(() => { document.title = 'Analytics | APF Admin'; }, []);
+
   useEffect(() => {
     authFetch('/api/admin/stats')
       .then(r => r.json())

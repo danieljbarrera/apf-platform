@@ -2,14 +2,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
+import { useToast } from '@/lib/toast';
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  New:              { bg: '#e8f0ff', color: '#2d5a9e' },
-  Booked:           { bg: '#f5efe4', color: '#785e36' },
+  New:                { bg: '#e8f0ff', color: '#2d5a9e' },
+  Booked:             { bg: '#f5efe4', color: '#785e36' },
   'Menu Development': { bg: '#fff7ed', color: '#b45309' },
-  EO:               { bg: '#f3f0ff', color: '#6d28d9' },
-  Completed:        { bg: 'var(--green-lt)', color: 'var(--green)' },
-  Lost:             { bg: '#f4f4f4', color: '#79715f' },
+  EO:                 { bg: '#f3f0ff', color: '#6d28d9' },
+  Completed:          { bg: 'var(--green-lt)', color: 'var(--green)' },
+  Lost:               { bg: '#f4f4f4', color: '#79715f' },
 };
 
 const PIPELINE_COLORS: Record<string, string> = {
@@ -29,6 +30,8 @@ const BOOL_FIELDS = [
   'testimonial_received', 'added_to_portfolio',
 ];
 
+const STATUSES = ['New', 'Booked', 'Menu Development', 'EO', 'Completed', 'Lost'];
+
 type Lead = Record<string, unknown>;
 type Event = Record<string, unknown>;
 type Stats = {
@@ -39,10 +42,77 @@ type Stats = {
   pipeline: { status: string; count: number }[];
 };
 
-function StatusBadge({ status }: { status: string }) {
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(d: string | null | undefined) {
+  if (!d) return '—';
+  const dateStr = String(d).includes('T') ? String(d) : String(d) + 'T12:00:00';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function relDate(d: string | null | undefined): string {
+  if (!d) return '';
+  const dateStr = String(d).includes('T') ? String(d) : String(d) + 'T12:00:00';
+  const dt = new Date(dateStr);
+  if (isNaN(dt.getTime())) return '';
+  const days = Math.round((dt.getTime() - Date.now()) / 864e5);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days === -1) return 'Yesterday';
+  if (days > 1 && days <= 14) return `in ${days}d`;
+  if (days > 14 && days <= 60) return `in ${Math.round(days / 7)}w`;
+  return '';
+}
+
+function firstDay(event: Event) {
+  const days = (event.event_days as Event[]) || [];
+  if (!days.length) return null;
+  return days.slice().sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))[0];
+}
+
+function totalGuests(event: Event) {
+  return ((event.event_days as Event[]) || []).reduce((s, d) => s + (Number(d.guests) || 0), 0);
+}
+
+function urgencyStyle(event: Event): React.CSSProperties {
+  const day = firstDay(event);
+  if (!day || !day.event_date) return {};
+  const dt = new Date(String(day.event_date) + 'T12:00:00');
+  const daysUntil = Math.ceil((dt.getTime() - Date.now()) / 864e5);
+  if (daysUntil < 0 || daysUntil > 30) return {};
+  const done = BOOL_FIELDS.filter(f => event[f] === true).length;
+  if (done / BOOL_FIELDS.length >= 0.8) return {};
+  if (daysUntil <= 7) return { borderLeft: '3px solid var(--red)' };
+  return { borderLeft: '3px solid #d97706' };
+}
+
+function exportCSV(data: Record<string, unknown>[], filename: string) {
+  if (!data.length) return;
+  const skip = new Set(['event_days', 'deleted_at']);
+  const keys = Object.keys(data[0]).filter(k => !skip.has(k));
+  const rows = [keys.join(','), ...data.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+  a.download = filename; a.click();
+}
+
+function lsGet<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+
+// ── small components ─────────────────────────────────────────────────────────
+
+function StatusBadge({ status, onClick }: { status: string; onClick?: (e: React.MouseEvent) => void }) {
   const s = STATUS_COLORS[status] || { bg: '#f4f4f4', color: '#555' };
   return (
-    <span style={{ background: s.bg, color: s.color, borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+    <span
+      onClick={onClick}
+      title={onClick ? 'Click to change status' : undefined}
+      style={{ background: s.bg, color: s.color, borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', whiteSpace: 'nowrap', cursor: onClick ? 'pointer' : 'default' }}
+    >
       {status}
     </span>
   );
@@ -50,28 +120,23 @@ function StatusBadge({ status }: { status: string }) {
 
 function ProgressBar({ event }: { event: Event }) {
   const done = BOOL_FIELDS.filter(f => event[f] === true).length;
-  const total = BOOL_FIELDS.length;
-  const pct = Math.round((done / total) * 100);
+  const pct = Math.round((done / BOOL_FIELDS.length) * 100);
   const color = pct === 100 ? '#38614a' : pct >= 60 ? '#97784c' : pct >= 30 ? '#b45309' : '#2d5a9e';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 110 }}>
       <div style={{ flex: 1, height: 5, background: 'var(--paper-3)', borderRadius: 99, overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99 }} />
       </div>
-      <span style={{ fontSize: 11, color: 'var(--ink-4)', whiteSpace: 'nowrap' }}>{done}/{total}</span>
+      <span style={{ fontSize: 11, color: 'var(--ink-4)', whiteSpace: 'nowrap' }}>{done}/{BOOL_FIELDS.length}</span>
     </div>
   );
 }
 
 function TrashBtn({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   return (
-    <button
-      onClick={onClick}
-      title="Move to trash"
-      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: 'var(--ink-4)', borderRadius: 'var(--r-sm)', lineHeight: 1 }}
+    <button onClick={onClick} title="Move to trash" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: 'var(--ink-4)', borderRadius: 'var(--r-sm)', lineHeight: 1 }}
       onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-      onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-4)')}
-    >
+      onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-4)')}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
       </svg>
@@ -102,37 +167,55 @@ function StatTile({ label, value, sub, color }: { label: string; value: string; 
   );
 }
 
-function fmt(d: string | null) {
-  if (!d) return '—';
-  const dateStr = d.includes('T') ? d : d + 'T12:00:00';
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function SkeletonRows({ cols, count = 5 }: { cols: number; count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <tr key={i}>
+          {Array.from({ length: cols }).map((_, j) => (
+            <td key={j} style={{ padding: '14px 16px' }}>
+              <div className="skeleton" style={{ height: 10, width: j === 0 ? '60%' : j === 1 ? '45%' : '35%', borderRadius: 3 }} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
 }
 
-function ConvertModal({ lead, onClose, onConverted }: {
-  lead: Lead;
-  onClose: () => void;
+function EmptyState({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
+  return (
+    <tr>
+      <td colSpan={99} style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+        <div style={{ fontSize: 24, marginBottom: 10, opacity: 0.3 }}>{icon}</div>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', color: 'var(--ink-3)', marginBottom: 4 }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{sub}</div>}
+      </td>
+    </tr>
+  );
+}
+
+// ── modals ───────────────────────────────────────────────────────────────────
+
+function ConvertModal({ lead, onClose, onConverted, authFetch }: {
+  lead: Lead; onClose: () => void;
   onConverted: (eventId: string) => void;
+  authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
 }) {
   const [venue, setVenue] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const authFetch = useCallback(async (url: string, options?: RequestInit) => {
-    const supabase = getSupabaseBrowser();
-    const { data: { session } } = await supabase.auth.getSession();
-    return fetch(url, {
-      ...options,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...options?.headers },
-    });
-  }, []);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!venue.trim()) { setError('Venue is required'); return; }
-    setSaving(true);
-    setError('');
+    setSaving(true); setError('');
     const clientNames = `${lead.first_name} ${lead.last_name}`.trim();
     const res = await authFetch('/api/admin/events', {
       method: 'POST',
@@ -143,16 +226,13 @@ function ConvertModal({ lead, onClose, onConverted }: {
     });
     const newEvent = await res.json();
     if (!res.ok) { setError(newEvent.error || 'Failed to create event'); setSaving(false); return; }
-    await authFetch('/api/admin/leads', {
-      method: 'PATCH',
-      body: JSON.stringify({ id: lead.id, converted: true }),
-    });
+    await authFetch('/api/admin/leads', { method: 'PATCH', body: JSON.stringify({ id: lead.id, converted: true }) });
     onConverted(newEvent.id);
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-      <div className="card" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}>
         <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 8 }}>Convert to Event</div>
         <h2 style={{ fontFamily: 'var(--serif)', fontSize: '1.4rem', fontWeight: 500, marginBottom: 4 }}>
           {String(lead.first_name)} {String(lead.last_name)}
@@ -169,7 +249,7 @@ function ConvertModal({ lead, onClose, onConverted }: {
           {error && <div style={{ background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid #e2bcbc', borderRadius: 'var(--r-sm)', padding: '9px 13px', fontSize: 13, marginBottom: '1rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Cancel</button>
-            <button type="submit" disabled={saving} className="btn btn-brass">{saving ? 'Creating...' : 'Create Event'}</button>
+            <button type="submit" disabled={saving} className="btn btn-brass">{saving ? 'Creating…' : 'Create Event'}</button>
           </div>
         </form>
       </div>
@@ -178,8 +258,7 @@ function ConvertModal({ lead, onClose, onConverted }: {
 }
 
 function AddLeadModal({ onClose, onSaved, authFetch }: {
-  onClose: () => void;
-  onSaved: () => void;
+  onClose: () => void; onSaved: () => void;
   authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
 }) {
   const [form, setForm] = useState({
@@ -192,6 +271,12 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   function set(k: string, v: unknown) { setForm(f => ({ ...f, [k]: v })); }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -200,7 +285,7 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
       setError('First name, last name, event date, guests, and style are required.'); return;
     }
     if (form.send_email && !form.email) {
-      setError('Email address is required to send an estimate.'); return;
+      setError('Email is required to send an estimate.'); return;
     }
     setSaving(true); setError('');
     const res = await authFetch('/api/admin/leads', { method: 'POST', body: JSON.stringify(form) });
@@ -209,36 +294,35 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
     onSaved();
   }
 
-  const fieldStyle = { marginBottom: 14 };
-  const row = { display: 'flex', gap: 12 } as React.CSSProperties;
+  const row: React.CSSProperties = { display: 'flex', gap: 12 };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem', overflowY: 'auto' }}>
-      <div className="card" style={{ width: '100%', maxWidth: 560, padding: '2rem', margin: 'auto' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem', overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 560, padding: '2rem', margin: 'auto' }}>
         <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 8 }}>Add Lead Manually</div>
         <h2 style={{ fontFamily: 'var(--serif)', fontSize: '1.35rem', fontWeight: 500, marginBottom: '1.25rem' }}>New Lead</h2>
         <form onSubmit={handleSubmit}>
           <div style={row}>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>First name *</label><input value={form.first_name} onChange={e => set('first_name', e.target.value)} autoFocus /></div>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Last name *</label><input value={form.last_name} onChange={e => set('last_name', e.target.value)} /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>First name *</label><input value={form.first_name} onChange={e => set('first_name', e.target.value)} autoFocus /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Last name *</label><input value={form.last_name} onChange={e => set('last_name', e.target.value)} /></div>
           </div>
           <div style={row}>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Email</label><input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="for estimate email" /></div>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Phone</label><input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Email</label><input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="for estimate email" /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Phone</label><input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
           </div>
           <div style={row}>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Event date *</label><input type="date" value={form.event_date} onChange={e => set('event_date', e.target.value)} /></div>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Guests *</label><input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} /></div>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}><label>Hours</label><input type="number" min="1" max="16" value={form.hours} onChange={e => set('hours', e.target.value)} /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Event date *</label><input type="date" value={form.event_date} onChange={e => set('event_date', e.target.value)} /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Guests *</label><input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Hours</label><input type="number" min="1" max="16" value={form.hours} onChange={e => set('hours', e.target.value)} /></div>
           </div>
           <div style={row}>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}>
               <label>Service style *</label>
               <select value={form.preferred_style} onChange={e => set('preferred_style', e.target.value)}>
                 {['Buffet', 'Family Style', 'Plated'].map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
-            <div className="field" style={{ ...fieldStyle, flex: 1 }}>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}>
               <label>Bar</label>
               <select value={form.bar_package} onChange={e => set('bar_package', e.target.value)}>
                 {['None', 'Soft Bar', 'Full Bar'].map(s => <option key={s}>{s}</option>)}
@@ -246,13 +330,11 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 500, marginBottom: 8, letterSpacing: '0.04em' }}>Add-ons</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 500, marginBottom: 8 }}>Add-ons</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div className="field" style={{ marginBottom: 0 }}>
-                <select value={form.appetizer_count} onChange={e => set('appetizer_count', e.target.value)} style={{ fontSize: 12, padding: '6px 28px 6px 10px' }}>
-                  {['0','1','2','3','4','5','6'].map(n => <option key={n} value={n}>{n === '0' ? 'No appetizers' : `${n} appetizer${n === '1' ? '' : 's'}`}</option>)}
-                </select>
-              </div>
+              <select value={form.appetizer_count} onChange={e => set('appetizer_count', e.target.value)} style={{ fontSize: 12, padding: '6px 28px 6px 10px', width: 'auto' }}>
+                {['0','1','2','3','4','5','6'].map(n => <option key={n} value={n}>{n === '0' ? 'No appetizers' : `${n} appetizer${n === '1' ? '' : 's'}`}</option>)}
+              </select>
               {(['include_dessert', 'include_coffee'] as const).map(key => {
                 const label = key === 'include_dessert' ? 'Dessert' : 'Coffee & Tea';
                 const active = form[key];
@@ -265,7 +347,7 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
               })}
             </div>
           </div>
-          <div className="field" style={fieldStyle}>
+          <div className="field" style={{ marginBottom: 14 }}>
             <label>Notes</label>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Source, special requests, anything relevant…" />
           </div>
@@ -289,17 +371,104 @@ function AddLeadModal({ onClose, onSaved, authFetch }: {
   );
 }
 
+function AddEventModal({ onClose, onSaved, authFetch }: {
+  onClose: () => void; onSaved: (eventId: string) => void;
+  authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
+}) {
+  const [form, setForm] = useState({ client_names: '', status: 'New', event_date: '', venue: '', guests: '', service_style: 'Buffet' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.client_names || !form.event_date || !form.venue) { setError('Client name, event date, and venue are required.'); return; }
+    setSaving(true); setError('');
+    const res = await authFetch('/api/admin/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: { client_names: form.client_names, status: form.status },
+        days: [{ event_date: form.event_date, venue: form.venue, guests: form.guests ? Number(form.guests) : null, service_style: form.service_style, sort_order: 0 }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || 'Failed to create event'); setSaving(false); return; }
+    onSaved(data.id);
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(22,20,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 8 }}>New Event</div>
+        <h2 style={{ fontFamily: 'var(--serif)', fontSize: '1.35rem', fontWeight: 500, marginBottom: '1.25rem' }}>Add Event Directly</h2>
+        <form onSubmit={handleSubmit}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div className="field" style={{ flex: 2, marginBottom: 14 }}><label>Client name *</label><input value={form.client_names} onChange={e => set('client_names', e.target.value)} autoFocus placeholder="e.g. The Johnson Family" /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}>
+              <label>Status</label>
+              <select value={form.status} onChange={e => set('status', e.target.value)}>
+                {STATUSES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Event date *</label><input type="date" value={form.event_date} onChange={e => set('event_date', e.target.value)} /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Guests</label><input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} /></div>
+          </div>
+          <div className="field" style={{ marginBottom: 14 }}><label>Venue *</label><input value={form.venue} onChange={e => set('venue', e.target.value)} placeholder="Venue name" /></div>
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label>Service style</label>
+            <select value={form.service_style} onChange={e => set('service_style', e.target.value)}>
+              {['Buffet', 'Family Style', 'Plated'].map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          {error && <div style={{ background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid #e2bcbc', borderRadius: 'var(--r-sm)', padding: '9px 13px', fontSize: 13, marginBottom: '1rem' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Cancel</button>
+            <button type="submit" disabled={saving} className="btn btn-brass">{saving ? 'Creating…' : 'Create Event'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── main dashboard ────────────────────────────────────────────────────────────
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [tab, setTab] = useState<'events' | 'leads' | 'trash'>('events');
+  const { toast } = useToast();
+
+  const [tab, setTab] = useState<'events' | 'leads' | 'trash'>(() => lsGet('apf-tab', 'events' as 'events'));
+  const [statusFilter, setStatusFilter] = useState<string>(() => lsGet('apf-status-filter', 'All'));
+  const [eventSort, setEventSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>(() => lsGet('apf-event-sort', { field: 'created_at', dir: 'desc' }));
+  const [leadSort, setLeadSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>(() => lsGet('apf-lead-sort', { field: 'created_at', dir: 'desc' }));
+
   const [events, setEvents] = useState<Event[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [trash, setTrash] = useState<{ leads: Lead[]; events: Event[] }>({ leads: [], events: [] });
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('All');
+
+  const [search, setSearch] = useState('');
+  const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
   const [converting, setConverting] = useState<Lead | null>(null);
   const [addingLead, setAddingLead] = useState(false);
+  const [addingEvent, setAddingEvent] = useState(false);
+
+  // Persist UI state to localStorage
+  useEffect(() => { localStorage.setItem('apf-tab', JSON.stringify(tab)); }, [tab]);
+  useEffect(() => { localStorage.setItem('apf-status-filter', JSON.stringify(statusFilter)); }, [statusFilter]);
+  useEffect(() => { localStorage.setItem('apf-event-sort', JSON.stringify(eventSort)); }, [eventSort]);
+  useEffect(() => { localStorage.setItem('apf-lead-sort', JSON.stringify(leadSort)); }, [leadSort]);
+  useEffect(() => { document.title = 'Dashboard | APF Admin'; }, []);
 
   const authFetch = useCallback(async (url: string, opts?: RequestInit) => {
     const supabase = getSupabaseBrowser();
@@ -325,22 +494,28 @@ export default function AdminDashboard() {
 
   async function softDelete(type: 'lead' | 'event', id: string) {
     await authFetch('/api/admin/trash', { method: 'PATCH', body: JSON.stringify({ type, id, action: 'trash' }) });
+    toast(`Moved to trash`);
     reload();
   }
 
   async function restore(type: 'lead' | 'event', id: string) {
     await authFetch('/api/admin/trash', { method: 'PATCH', body: JSON.stringify({ type, id, action: 'restore' }) });
+    toast('Restored');
     reload();
   }
 
   async function purge(type: 'lead' | 'event', id: string) {
     if (!confirm('Permanently delete? This cannot be undone.')) return;
     await authFetch('/api/admin/trash', { method: 'DELETE', body: JSON.stringify({ type, id }) });
+    toast('Deleted permanently', 'info');
     reload();
   }
 
-  const [eventSort, setEventSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>({ field: 'created_at', dir: 'desc' });
-  const [leadSort, setLeadSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>({ field: 'created_at', dir: 'desc' });
+  async function saveStatus(eventId: string, status: string) {
+    await authFetch(`/api/admin/events/${eventId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    toast('Status updated');
+    reload();
+  }
 
   function toggleEventSort(field: 'event_date' | 'created_at') {
     setEventSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
@@ -349,63 +524,47 @@ export default function AdminDashboard() {
     setLeadSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
   }
 
-  const statuses = ['All', 'New', 'Booked', 'Menu Development', 'EO', 'Completed', 'Lost'];
+  const q = search.toLowerCase();
 
   const filteredEvents = (statusFilter === 'All' ? events : events.filter(e => e.status === statusFilter))
-    .slice()
-    .sort((a, b) => {
+    .filter(e => !q || String(e.client_names).toLowerCase().includes(q) || ((e.event_days as Event[]) || []).some(d => String(d.venue).toLowerCase().includes(q)))
+    .slice().sort((a, b) => {
       let av: string, bv: string;
       if (eventSort.field === 'event_date') {
         const ad = ((a.event_days as Event[]) || []).sort((x, y) => String(x.event_date).localeCompare(String(y.event_date)))[0];
         const bd = ((b.event_days as Event[]) || []).sort((x, y) => String(x.event_date).localeCompare(String(y.event_date)))[0];
-        av = ad ? String(ad.event_date) : '9999';
-        bv = bd ? String(bd.event_date) : '9999';
+        av = ad ? String(ad.event_date) : '9999'; bv = bd ? String(bd.event_date) : '9999';
       } else {
-        av = String(a.created_at || '');
-        bv = String(b.created_at || '');
+        av = String(a.created_at || ''); bv = String(b.created_at || '');
       }
       return eventSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
 
-  const sortedLeads = leads.slice().sort((a, b) => {
-    const av = String(leadSort.field === 'event_date' ? (a.event_date || '9999') : (a.created_at || ''));
-    const bv = String(leadSort.field === 'event_date' ? (b.event_date || '9999') : (b.created_at || ''));
-    return leadSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-  });
+  const sortedLeads = leads
+    .filter(l => !q || `${l.first_name} ${l.last_name}`.toLowerCase().includes(q) || String(l.email).toLowerCase().includes(q))
+    .slice().sort((a, b) => {
+      const av = String(leadSort.field === 'event_date' ? (a.event_date || '9999') : (a.created_at || ''));
+      const bv = String(leadSort.field === 'event_date' ? (b.event_date || '9999') : (b.created_at || ''));
+      return leadSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
 
   const trashCount = trash.leads.length + trash.events.length;
-
-  function firstDay(event: Event) {
-    const days = (event.event_days as Event[]) || [];
-    if (!days.length) return null;
-    return days.sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))[0];
-  }
-
-  function totalGuests(event: Event) {
-    const days = (event.event_days as Event[]) || [];
-    return days.reduce((sum, d) => sum + (Number(d.guests) || 0), 0);
-  }
-
-  if (loading) return <div style={{ color: 'var(--ink-3)', fontSize: 14, padding: '2rem 0' }}>Loading...</div>;
+  const statuses = ['All', ...STATUSES];
 
   return (
     <div>
-      {addingLead && (
-        <AddLeadModal
-          authFetch={authFetch}
-          onClose={() => setAddingLead(false)}
-          onSaved={() => { setAddingLead(false); reload(); }}
-        />
-      )}
-
+      {/* Modals */}
+      {addingLead && <AddLeadModal authFetch={authFetch} onClose={() => setAddingLead(false)} onSaved={() => { setAddingLead(false); toast('Lead added'); reload(); }} />}
+      {addingEvent && <AddEventModal authFetch={authFetch} onClose={() => setAddingEvent(false)} onSaved={id => { setAddingEvent(false); toast('Event created'); reload().then(() => router.push(`/admin/events/${id}`)); }} />}
       {converting && (
         <ConvertModal
-          lead={converting}
+          lead={converting} authFetch={authFetch}
           onClose={() => setConverting(null)}
-          onConverted={(eventId) => { setConverting(null); reload().then(() => { setTab('events'); router.push(`/admin/events/${eventId}`); }); }}
+          onConverted={id => { setConverting(null); toast('Lead converted to event!'); reload().then(() => { setTab('events'); router.push(`/admin/events/${id}`); }); }}
         />
       )}
 
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.75rem', fontWeight: 500 }}>Dashboard</h1>
         <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{events.length} events · {leads.length} leads</div>
@@ -428,10 +587,15 @@ export default function AdminDashboard() {
           </div>
           <div className="card" style={{ padding: '1rem 1.4rem', marginBottom: '1.5rem' }}>
             <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 10 }}>Pipeline</div>
-            <div style={{ display: 'flex', gap: 2, height: 8, borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 2, height: 22, borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
               {stats.pipeline.filter(p => p.count > 0).map(p => {
                 const total = stats.pipeline.reduce((s, x) => s + x.count, 0);
-                return <div key={p.status} style={{ flex: p.count / total, background: PIPELINE_COLORS[p.status], minWidth: 4 }} title={`${p.status}: ${p.count}`} />;
+                const pct = p.count / total;
+                return (
+                  <div key={p.status} style={{ flex: p.count, background: PIPELINE_COLORS[p.status], minWidth: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={`${p.status}: ${p.count}`}>
+                    {pct > 0.1 && <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 10, fontWeight: 700 }}>{p.count}</span>}
+                  </div>
+                );
               })}
             </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -446,7 +610,23 @@ export default function AdminDashboard() {
         </>
       )}
 
-      {/* Tabs */}
+      {/* Search + tabs */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 340 }}>
+          <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-4)', pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            type="search"
+            placeholder="Search clients, venues, email…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ paddingLeft: 32, fontSize: 13, height: 36, width: '100%' }}
+          />
+        </div>
+        <div style={{ flex: 1 }} />
+      </div>
+
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
         {(['events', 'leads', 'trash'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--brass)' : '2px solid transparent', padding: '10px 20px', fontSize: 13, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--brass)' : 'var(--ink-3)', cursor: 'pointer', fontFamily: 'var(--sans)', marginBottom: -1, letterSpacing: '0.04em' }}>
@@ -458,12 +638,17 @@ export default function AdminDashboard() {
       {/* Events tab */}
       {tab === 'events' && (
         <>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-            {statuses.map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)} style={{ border: '1.5px solid', borderColor: statusFilter === s ? 'var(--brass)' : 'var(--rule)', background: statusFilter === s ? 'var(--brass)' : 'transparent', color: statusFilter === s ? '#fff' : 'var(--ink-3)', borderRadius: 99, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: 500 }}>
-                {s}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+              {statuses.map(s => (
+                <button key={s} onClick={() => setStatusFilter(s)} style={{ border: '1.5px solid', borderColor: statusFilter === s ? 'var(--brass)' : 'var(--rule)', background: statusFilter === s ? 'var(--brass)' : 'transparent', color: statusFilter === s ? '#fff' : 'var(--ink-3)', borderRadius: 99, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
+              + Add Event
+            </button>
           </div>
           <div className="card" style={{ overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -481,19 +666,42 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filteredEvents.map((event) => {
+                {loading ? <SkeletonRows cols={9} /> : filteredEvents.length === 0 ? (
+                  <EmptyState icon="✦" title={search ? 'No events match your search' : statusFilter !== 'All' ? `No ${statusFilter} events` : 'No events yet'} sub={search ? 'Try a different search term' : statusFilter !== 'All' ? 'Try a different status filter' : 'Events appear here once a lead is converted'} />
+                ) : filteredEvents.map((event) => {
                   const day = firstDay(event);
+                  const dayDate = day ? String(day.event_date) : null;
+                  const rel = relDate(dayDate);
+                  const uStyle = urgencyStyle(event);
                   return (
                     <tr key={String(event.id)} onClick={() => router.push(`/admin/events/${event.id}`)}
-                      style={{ cursor: 'pointer', borderBottom: '1px solid var(--paper-3)', transition: 'background 0.12s' }}
+                      style={{ cursor: 'pointer', borderBottom: '1px solid var(--paper-3)', transition: 'background 0.12s', ...uStyle }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
                       <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{fmt(day ? String(day.event_date) : null)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                        {fmt(dayDate)}
+                        {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
+                      </td>
                       <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{totalGuests(event) || '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.service_style) : '—'}</td>
-                      <td style={{ padding: '12px 16px' }}><StatusBadge status={String(event.status)} /></td>
+                      <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
+                        {editingStatusId === String(event.id) ? (
+                          <select
+                            autoFocus
+                            defaultValue={String(event.status)}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => { const s = e.target.value; setEditingStatusId(null); await saveStatus(String(event.id), s); }}
+                            onBlur={() => setEditingStatusId(null)}
+                            style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600, padding: '3px 24px 3px 8px', borderRadius: 99, border: '1px solid var(--rule)', background: 'var(--paper)', cursor: 'pointer', letterSpacing: '0.05em' }}
+                          >
+                            {STATUSES.map(s => <option key={s}>{s}</option>)}
+                          </select>
+                        ) : (
+                          <StatusBadge status={String(event.status)} onClick={e => { e.stopPropagation(); setEditingStatusId(String(event.id)); }} />
+                        )}
+                      </td>
                       <td style={{ padding: '12px 16px' }}><ProgressBar event={event} /></td>
                       <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>
                       <td style={{ padding: '12px 8px' }}>
@@ -502,64 +710,82 @@ export default function AdminDashboard() {
                     </tr>
                   );
                 })}
-                {filteredEvents.length === 0 && (
-                  <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No events found</td></tr>
-                )}
               </tbody>
             </table>
           </div>
+          {!loading && filteredEvents.length > 0 && (
+            <div style={{ marginTop: 12, textAlign: 'right' }}>
+              <button onClick={() => exportCSV(filteredEvents.map(e => { const d = firstDay(e); return { client_names: e.client_names, event_date: d?.event_date, venue: d?.venue, guests: totalGuests(e), status: e.status, submitted: e.created_at }; }), 'apf-events.csv')}
+                style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
+                Export CSV
+              </button>
+            </div>
+          )}
         </>
       )}
 
       {/* Leads tab */}
       {tab === 'leads' && (
         <>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-          <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>
-            + Add Lead
-          </button>
-        </div>
-        <div className="card" style={{ overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--paper)' }}>
-                <PlainTh label="Name" />
-                <PlainTh label="Email" />
-                <SortTh label="Event Date" field="event_date" sort={leadSort} onToggle={() => toggleLeadSort('event_date')} />
-                <PlainTh label="Guests" />
-                <PlainTh label="Style" />
-                <PlainTh label="Bar" />
-                <SortTh label="Submitted" field="created_at" sort={leadSort} onToggle={() => toggleLeadSort('created_at')} />
-                <PlainTh label="" />
-                <PlainTh label="" />
-              </tr>
-            </thead>
-            <tbody>
-              {sortedLeads.map((lead) => (
-                <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email)}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{fmt(lead.event_date ? String(lead.event_date) : null)}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{lead.guests ? String(lead.guests) : '—'}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <button onClick={() => setConverting(lead)} style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                      Convert →
-                    </button>
-                  </td>
-                  <td style={{ padding: '12px 8px' }}>
-                    <TrashBtn onClick={() => softDelete('lead', String(lead.id))} />
-                  </td>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+            <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>
+              + Add Lead
+            </button>
+          </div>
+          <div className="card" style={{ overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'var(--paper)' }}>
+                  <PlainTh label="Name" />
+                  <PlainTh label="Email" />
+                  <SortTh label="Event Date" field="event_date" sort={leadSort} onToggle={() => toggleLeadSort('event_date')} />
+                  <PlainTh label="Guests" />
+                  <PlainTh label="Style" />
+                  <PlainTh label="Bar" />
+                  <SortTh label="Submitted" field="created_at" sort={leadSort} onToggle={() => toggleLeadSort('created_at')} />
+                  <PlainTh label="" />
+                  <PlainTh label="" />
                 </tr>
-              ))}
-              {leads.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No unconverted leads</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {loading ? <SkeletonRows cols={9} /> : sortedLeads.length === 0 ? (
+                  <EmptyState icon="✦" title={search ? 'No leads match your search' : 'No unconverted leads'} sub={search ? 'Try a different search term' : 'New quote form submissions appear here'} />
+                ) : sortedLeads.map((lead) => {
+                  const rel = relDate(lead.event_date ? String(lead.event_date) : null);
+                  return (
+                    <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email || '—')}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                        {fmt(lead.event_date ? String(lead.event_date) : null)}
+                        {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
+                      </td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{lead.guests ? String(lead.guests) : '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <button onClick={() => setConverting(lead)} style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                          Convert →
+                        </button>
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <TrashBtn onClick={() => softDelete('lead', String(lead.id))} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!loading && sortedLeads.length > 0 && (
+            <div style={{ marginTop: 12, textAlign: 'right' }}>
+              <button onClick={() => exportCSV(sortedLeads as Record<string, unknown>[], 'apf-leads.csv')}
+                style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
+                Export CSV
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -567,13 +793,16 @@ export default function AdminDashboard() {
       {tab === 'trash' && (
         <div>
           {trashCount === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--ink-4)', fontSize: 13 }}>Trash is empty</div>
+            <div style={{ textAlign: 'center', padding: '3rem' }}>
+              <div style={{ fontSize: 24, marginBottom: 10, opacity: 0.3 }}>🗑</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', color: 'var(--ink-3)', marginBottom: 4 }}>Trash is empty</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>Items you delete will appear here for 30 days before being purged</div>
+            </div>
           ) : (
             <>
               <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: '1rem' }}>
                 Items are permanently deleted after 30 days. Restore anything moved here by mistake.
               </div>
-
               {trash.events.length > 0 && (
                 <div style={{ marginBottom: '1.5rem' }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 8 }}>Events</div>
@@ -601,7 +830,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               )}
-
               {trash.leads.length > 0 && (
                 <div>
                   <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 8 }}>Leads</div>
@@ -611,7 +839,7 @@ export default function AdminDashboard() {
                         {trash.leads.map(lead => (
                           <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
                             <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--ink-3)' }}>{`${lead.first_name} ${lead.last_name}`}</td>
-                            <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 13 }}>{String(lead.email)}</td>
+                            <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 13 }}>{String(lead.email || '—')}</td>
                             <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 12 }}>Deleted {fmt(String(lead.deleted_at))}</td>
                             <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

@@ -115,6 +115,10 @@ export default function EventDetailPage() {
       .then(data => { setEvent(data); setLoading(false); });
   }, [id, authFetch]);
 
+  useEffect(() => {
+    if (event?.client_names) document.title = `${String(event.client_names)} | APF Admin`;
+  }, [event?.client_names]);
+
   const patch = useCallback((updates: Record<string, unknown>) => {
     setEvent(prev => prev ? { ...prev, ...updates } : prev);
     setSaveState('saving');

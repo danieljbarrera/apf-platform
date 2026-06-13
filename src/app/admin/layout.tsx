@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
+import { ToastProvider } from '@/lib/toast';
 
 const STATUS_COLORS: Record<string, string> = {
   New: '#2d5a9e',
@@ -36,41 +37,44 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.replace('/admin/login');
   }
 
-  if (pathname === '/admin/login') return <>{children}</>;
+  if (pathname === '/admin/login') return <ToastProvider>{children}</ToastProvider>;
   if (checking) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)' }}>
-      <div style={{ color: 'var(--ink-3)', fontSize: 14 }}>Loading...</div>
-    </div>
+    <ToastProvider>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)' }}>
+        <div style={{ color: 'var(--ink-3)', fontSize: 14 }}>Loading…</div>
+      </div>
+    </ToastProvider>
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--paper)' }}>
-      {/* Top nav */}
-      <nav style={{ background: 'var(--ink)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 1.5rem', display: 'flex', alignItems: 'center', gap: 24, height: 52 }}>
-        <div style={{ fontFamily: 'var(--serif)', color: '#fff', fontSize: '1.05rem', fontWeight: 500, marginRight: 8 }}>
-          All Purpose Flower
-        </div>
-        <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.15)' }} />
-        <NavLink href="/admin" active={pathname === '/admin'}>Dashboard</NavLink>
-        <NavLink href="/admin/analytics" active={pathname === '/admin/analytics'}>Analytics</NavLink>
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={handleLogout}
-          style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', borderRadius: 'var(--r-sm)', padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase' }}
-        >
-          Sign out
-        </button>
-      </nav>
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
-        {children}
-      </main>
-    </div>
+    <ToastProvider>
+      <div style={{ minHeight: '100vh', background: 'var(--paper)' }}>
+        <nav style={{ background: 'var(--ink)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 1.5rem', display: 'flex', alignItems: 'center', gap: 24, height: 52, position: 'sticky', top: 0, zIndex: 50 }}>
+          <div style={{ fontFamily: 'var(--serif)', color: '#fff', fontSize: '1.05rem', fontWeight: 500, marginRight: 8, whiteSpace: 'nowrap' }}>
+            All Purpose Flower
+          </div>
+          <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
+          <NavLink href="/admin" active={pathname === '/admin'}>Dashboard</NavLink>
+          <NavLink href="/admin/analytics" active={pathname === '/admin/analytics'}>Analytics</NavLink>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={handleLogout}
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', borderRadius: 'var(--r-sm)', padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+          >
+            Sign out
+          </button>
+        </nav>
+        <main style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
+          {children}
+        </main>
+      </div>
+    </ToastProvider>
   );
 }
 
 function NavLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
-    <a href={href} style={{ color: active ? '#fff' : 'rgba(255,255,255,0.55)', fontSize: 13, textDecoration: 'none', fontWeight: active ? 500 : 400, letterSpacing: '0.04em' }}>
+    <a href={href} style={{ color: active ? '#fff' : 'rgba(255,255,255,0.55)', fontSize: 13, textDecoration: 'none', fontWeight: active ? 500 : 400, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
       {children}
     </a>
   );
