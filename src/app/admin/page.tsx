@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseBrowser } from '@/lib/supabase';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   New:              { bg: '#e8f0ff', color: '#2d5a9e' },

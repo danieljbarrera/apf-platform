@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getSupabaseBrowser } from '@/lib/supabase';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 const STATUSES = ['New', 'Booked', 'Menu Development', 'EO', 'Completed', 'Lost'];
 
