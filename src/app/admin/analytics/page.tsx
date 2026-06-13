@@ -182,9 +182,6 @@ export default function AnalyticsPage() {
             <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.65, margin: 0 }}>
               Compare how well the public quote form converts vs. leads you enter manually from phone calls or referrals. A higher manual rate often means those clients are warmer — they sought you out directly.
             </p>
-            <div style={{ marginTop: '1rem', padding: '10px 14px', background: 'var(--paper-2)', borderRadius: 'var(--r-sm)', fontSize: 12, color: 'var(--ink-3)' }}>
-              New manual leads are tagged automatically. Run <code style={{ background: 'var(--paper-3)', padding: '1px 5px', borderRadius: 3 }}>ALTER TABLE quotes ADD COLUMN source text DEFAULT 'form'</code> to enable tracking.
-            </div>
           </div>
         </div>
       </Section>
