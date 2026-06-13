@@ -709,7 +709,61 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-          <div className="card" style={{ overflow: 'auto' }}>
+          {/* Mobile cards */}
+          <style>{`.event-table-wrap { display: block; } .event-cards-wrap { display: none; } @media (max-width: 640px) { .event-table-wrap { display: none; } .event-cards-wrap { display: block; } }`}</style>
+
+          <div className="event-cards-wrap">
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1,2,3].map(i => <div key={i} className="card skeleton" style={{ height: 110 }} />)}
+              </div>
+            ) : filteredEvents.length === 0 ? (
+              <div className="card" style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, marginBottom: 10, opacity: 0.3 }}>✦</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', color: 'var(--ink-3)' }}>{search ? 'No events match your search' : statusFilter !== 'All' ? `No ${statusFilter} events` : 'No events yet'}</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {filteredEvents.map(event => {
+                  const day = firstDay(event);
+                  const dayDate = day ? String(day.event_date) : null;
+                  const rel = relDate(dayDate);
+                  const accent = rowAccent(event);
+                  const done = BOOL_FIELDS.filter(f => event[f] === true).length;
+                  const pct = Math.round((done / BOOL_FIELDS.length) * 100);
+                  const barColor = pct === 100 ? '#38614a' : pct >= 60 ? '#97784c' : pct >= 30 ? '#b45309' : '#2d5a9e';
+                  return (
+                    <div key={String(event.id)}
+                      onClick={() => router.push(`/admin/events/${event.id}`)}
+                      className="card"
+                      style={{ padding: '12px 14px', cursor: 'pointer', animation: 'rowIn 0.15s ease', ...accent }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</div>
+                        <StatusBadge status={String(event.status)} />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmt(dayDate)}</span>
+                        {rel && <span style={{ fontSize: 10, color: 'var(--brass)', background: 'var(--paper-2)', borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{rel}</span>}
+                      </div>
+                      {day && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 8 }}>{String(day.venue || '—')} · {totalGuests(event) || '—'} guests · {String(day.service_style || '—')}</div>}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--paper-3)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{done}/{BOOL_FIELDS.length} checklist</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 80, height: 4, background: 'var(--paper-3)', borderRadius: 99, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99 }} />
+                          </div>
+                          <TrashBtn onClick={e => { e.stopPropagation(); softDelete('event', String(event.id)); }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop table */}
+          <div className="event-table-wrap card" style={{ overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--paper)' }}>
@@ -747,14 +801,11 @@ export default function AdminDashboard() {
                       <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{day ? String(day.service_style) : '—'}</td>
                       <td style={{ padding: compact ? '5px 10px' : '12px 16px' }} onClick={e => e.stopPropagation()}>
                         {editingStatusId === String(event.id) ? (
-                          <select
-                            autoFocus
-                            defaultValue={String(event.status)}
+                          <select autoFocus defaultValue={String(event.status)}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => { const s = e.target.value; setEditingStatusId(null); await saveStatus(String(event.id), s); }}
                             onBlur={() => setEditingStatusId(null)}
-                            style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600, padding: '3px 24px 3px 8px', borderRadius: 99, border: '1px solid var(--rule)', background: 'var(--paper)', cursor: 'pointer', letterSpacing: '0.05em' }}
-                          >
+                            style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600, padding: '3px 24px 3px 8px', borderRadius: 99, border: '1px solid var(--rule)', background: 'var(--paper)', cursor: 'pointer', letterSpacing: '0.05em' }}>
                             {STATUSES.map(s => <option key={s}>{s}</option>)}
                           </select>
                         ) : (
