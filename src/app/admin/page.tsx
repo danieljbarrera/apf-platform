@@ -469,8 +469,11 @@ export default function AdminDashboard() {
   const [converting, setConverting] = useState<Lead | null>(null);
   const [addingLead, setAddingLead] = useState(false);
   const [addingEvent, setAddingEvent] = useState(false);
+  const [compact, setCompact] = useState<boolean>(() => lsGet('apf-compact', false));
+  const [resending, setResending] = useState<string | null>(null);
 
   // Persist UI state to localStorage
+  useEffect(() => { localStorage.setItem('apf-compact', JSON.stringify(compact)); }, [compact]);
   useEffect(() => { localStorage.setItem('apf-tab', JSON.stringify(tab)); }, [tab]);
   useEffect(() => { localStorage.setItem('apf-status-filter', JSON.stringify(statusFilter)); }, [statusFilter]);
   useEffect(() => { localStorage.setItem('apf-event-sort', JSON.stringify(eventSort)); }, [eventSort]);
@@ -531,6 +534,14 @@ export default function AdminDashboard() {
     await authFetch('/api/admin/leads', { method: 'PATCH', body: JSON.stringify({ id, lead_status: 'lost' }) });
     toast('Lead marked as lost', 'info');
     reload();
+  }
+
+  async function resendEstimate(lead: Lead) {
+    if (!lead.email) { toast('No email address on this lead', 'error'); return; }
+    setResending(String(lead.id));
+    const res = await authFetch('/api/admin/leads/resend', { method: 'POST', body: JSON.stringify({ id: lead.id }) });
+    setResending(null);
+    if (res.ok) { toast('Estimate resent'); } else { toast('Failed to resend estimate', 'error'); }
   }
 
   async function restoreLeadActive(id: string) {
@@ -695,6 +706,9 @@ export default function AdminDashboard() {
                 </button>
               ))}
             </div>
+            <button onClick={() => setCompact(c => !c)} style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
+              {compact ? 'Compact ✓' : 'Compact'}
+            </button>
             <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
               + Add Event
             </button>
@@ -727,15 +741,15 @@ export default function AdminDashboard() {
                       style={{ cursor: 'pointer', borderBottom: '1px solid var(--paper-3)', transition: 'background 0.12s', animation: 'rowIn 0.15s ease', ...accent }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                      <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</td>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
                         {fmt(dayDate)}
                         {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
                       </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{totalGuests(event) || '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.service_style) : '—'}</td>
-                      <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{totalGuests(event) || '—'}</td>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.service_style) : '—'}</td>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px' }} onClick={e => e.stopPropagation()}>
                         {editingStatusId === String(event.id) ? (
                           <select
                             autoFocus
@@ -751,9 +765,9 @@ export default function AdminDashboard() {
                           <StatusBadge status={String(event.status)} onClick={e => { e.stopPropagation(); setEditingStatusId(String(event.id)); }} />
                         )}
                       </td>
-                      <td style={{ padding: '12px 16px' }}><ProgressBar event={event} /></td>
-                      <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>
-                      <td style={{ padding: '12px 8px' }}>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px' }}><ProgressBar event={event} /></td>
+                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>
+                      <td style={{ padding: compact ? '7px 6px' : '12px 8px' }}>
                         <TrashBtn onClick={e => { e.stopPropagation(); softDelete('event', String(event.id)); }} />
                       </td>
                     </tr>
@@ -833,10 +847,20 @@ export default function AdminDashboard() {
                         <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
                         <td style={{ padding: '12px 16px' }}>
                           {leadFilter === 'active' ? (
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'nowrap' }}>
                               <button onClick={() => setConverting(lead)} style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                                 Convert →
                               </button>
+                              {!!lead.email && (
+                                <button
+                                  onClick={() => resendEstimate(lead)}
+                                  disabled={resending === String(lead.id)}
+                                  title="Resend estimate email"
+                                  style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}
+                                >
+                                  {resending === String(lead.id) ? '…' : 'Resend'}
+                                </button>
+                              )}
                               <button onClick={() => markLeadLost(String(lead.id))} title="Mark as lost" style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
                                 Lost
                               </button>

@@ -95,12 +95,120 @@ const PHASES = [
   },
 ];
 
+function PhaseRing({ done, total }: { done: number; total: number }) {
+  const r = 10;
+  const circ = 2 * Math.PI * r;
+  const pct = total > 0 ? done / total : 0;
+  const dash = pct * circ;
+  const color = pct === 1 ? 'var(--green)' : pct >= 0.6 ? 'var(--brass)' : pct >= 0.3 ? '#b45309' : 'var(--ink-4)';
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" style={{ flexShrink: 0 }}>
+      <circle cx="13" cy="13" r={r} fill="none" stroke="var(--paper-3)" strokeWidth="3" />
+      <circle cx="13" cy="13" r={r} fill="none" stroke={color} strokeWidth="3"
+        strokeDasharray={`${dash} ${circ}`} strokeDashoffset={circ / 4}
+        strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.4s' }} />
+      <text x="13" y="16.5" textAnchor="middle" fontSize="7" fill={color} fontFamily="var(--sans)" fontWeight="700">
+        {done}/{total}
+      </text>
+    </svg>
+  );
+}
+
+function EditableDayCard({
+  day, index, total, authFetch, onSaved,
+}: {
+  day: Event; index: number; total: number;
+  authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    event_date: String(day.event_date || ''),
+    venue: String(day.venue || ''),
+    guests: String(day.guests || ''),
+    service_style: String(day.service_style || ''),
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    await authFetch(`/api/admin/event-days/${day.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        event_date: form.event_date || null,
+        venue: form.venue || null,
+        guests: form.guests ? Number(form.guests) : null,
+        service_style: form.service_style || null,
+      }),
+    });
+    setSaving(false);
+    setEditing(false);
+    onSaved();
+  }
+
+  function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
+
+  if (editing) {
+    return (
+      <div className="card" style={{ padding: '1.1rem 1.3rem', border: '1.5px solid var(--brass-lt)' }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 10 }}>
+          {total > 1 ? `Day ${index + 1}` : 'Event Day'}
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 10 }}>Date</label>
+            <input type="date" value={form.event_date} onChange={e => set('event_date', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }} />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 10 }}>Venue</label>
+            <input type="text" value={form.venue} onChange={e => set('venue', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div className="field" style={{ margin: 0, flex: 1 }}>
+              <label style={{ fontSize: 10 }}>Guests</label>
+              <input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }} />
+            </div>
+            <div className="field" style={{ margin: 0, flex: 1 }}>
+              <label style={{ fontSize: 10 }}>Style</label>
+              <select value={form.service_style} onChange={e => set('service_style', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }}>
+                <option value="">—</option>
+                {['Buffet', 'Family Style', 'Plated'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button onClick={() => setEditing(false)} style={{ flex: 1, background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Cancel</button>
+            <button onClick={save} disabled={saving} className="btn btn-brass" style={{ flex: 1, fontSize: 12, padding: '6px' }}>{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card" style={{ padding: '1.1rem 1.3rem', cursor: 'pointer', position: 'relative' }} onClick={() => setEditing(true)}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 6 }}>
+          {total > 1 ? `Day ${index + 1}` : 'Event Day'}
+        </div>
+        <span style={{ fontSize: 10, color: 'var(--ink-4)', opacity: 0.7 }}>Edit</span>
+      </div>
+      <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', marginBottom: 4 }}>{fmt(String(day.event_date))}</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 2 }}>{String(day.venue || '—')}</div>
+      <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>
+        {day.guests ? `${day.guests} guests` : ''} {day.service_style ? `· ${day.service_style}` : ''}
+      </div>
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [compact, setCompact] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
@@ -108,6 +216,12 @@ export default function EventDetailPage() {
     const { data: { session } } = await supabase.auth.getSession();
     return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...options?.headers } });
   }, []);
+
+  async function loadEvent() {
+    const r = await authFetch(`/api/admin/events/${id}`);
+    const data = await r.json();
+    setEvent(data);
+  }
 
   useEffect(() => {
     authFetch(`/api/admin/events/${id}`)
@@ -141,6 +255,8 @@ export default function EventDetailPage() {
     return { done, total: bools.length };
   }
 
+  const rowPad = compact ? '3px 0' : '5px 0';
+
   return (
     <div>
       {/* Breadcrumb */}
@@ -159,10 +275,17 @@ export default function EventDetailPage() {
             {event.planner_email ? <span style={{ fontSize: 13, color: 'var(--brass)' }}>{String(event.planner_email)}</span> : null}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} className="no-print">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }} className="no-print">
           <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
             {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? '✓ Saved' : ''}
           </span>
+          <button
+            onClick={() => setCompact(c => !c)}
+            title="Toggle compact checklist view"
+            style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-3)', fontFamily: 'var(--sans)' }}
+          >
+            {compact ? 'Compact ✓' : 'Compact'}
+          </button>
           <button onClick={() => window.print()} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
             Print
           </button>
@@ -197,17 +320,17 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {/* Event days */}
+      {/* Event days — editable */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 3)}, 1fr)`, gap: 12, marginBottom: '1.75rem' }}>
         {days.map((day, i) => (
-          <div key={String(day.id)} className="card" style={{ padding: '1.1rem 1.3rem' }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 6 }}>
-              {days.length > 1 ? `Day ${i + 1}` : 'Event Day'}
-            </div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', marginBottom: 4 }}>{fmt(String(day.event_date))}</div>
-            <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 2 }}>{String(day.venue)}</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{day.guests ? `${day.guests} guests` : ''} {day.service_style ? `· ${day.service_style}` : ''}</div>
-          </div>
+          <EditableDayCard
+            key={String(day.id)}
+            day={day}
+            index={i}
+            total={days.length}
+            authFetch={authFetch}
+            onSaved={loadEvent}
+          />
         ))}
       </div>
 
@@ -215,17 +338,20 @@ export default function EventDetailPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: '1.5rem' }}>
         {PHASES.map(phase => {
           const { done, total } = phaseProgress(phase);
+          const visibleFields = compact
+            ? phase.fields.filter(f => f.type !== 'bool' || event[f.key] !== true)
+            : phase.fields;
           return (
             <div key={phase.title} className="card">
-              <div style={{ padding: '1rem 1.3rem 0.75rem', borderBottom: '1px solid var(--paper-3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: compact ? '0.75rem 1.3rem 0.5rem' : '1rem 1.3rem 0.75rem', borderBottom: '1px solid var(--paper-3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600 }}>{phase.title}</div>
-                <div style={{ fontSize: 11, color: done === total ? 'var(--green)' : 'var(--ink-4)', fontWeight: done === total ? 600 : 400 }}>
-                  {done}/{total}
-                </div>
+                <PhaseRing done={done} total={total} />
               </div>
-              <div style={{ padding: '0.75rem 1.3rem' }}>
-                {phase.fields.map(field => (
-                  <div key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--paper-2)' }}>
+              <div style={{ padding: compact ? '0.5rem 1.3rem' : '0.75rem 1.3rem' }}>
+                {visibleFields.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--green)', padding: '4px 0' }}>✓ All complete</div>
+                ) : visibleFields.map(field => (
+                  <div key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: rowPad, borderBottom: '1px solid var(--paper-2)' }}>
                     {field.type === 'bool' && (
                       <>
                         <input
@@ -234,14 +360,14 @@ export default function EventDetailPage() {
                           onChange={e => patch({ [field.key]: e.target.checked })}
                           style={{ width: 15, height: 15, accentColor: 'var(--brass)', cursor: 'pointer', flexShrink: 0 }}
                         />
-                        <span style={{ fontSize: 12.5, color: event[field.key] === true ? 'var(--ink)' : 'var(--ink-3)', flex: 1, textDecoration: event[field.key] === true ? 'line-through' : 'none', textDecorationColor: 'var(--ink-4)' }}>
+                        <span style={{ fontSize: compact ? 12 : 12.5, color: event[field.key] === true ? 'var(--ink)' : 'var(--ink-3)', flex: 1, textDecoration: event[field.key] === true ? 'line-through' : 'none', textDecorationColor: 'var(--ink-4)' }}>
                           {field.label}
                         </span>
                       </>
                     )}
                     {field.type === 'date' && (
                       <>
-                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
+                        <span style={{ fontSize: compact ? 12 : 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <input
                           type="date"
                           value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
@@ -252,7 +378,7 @@ export default function EventDetailPage() {
                     )}
                     {field.type === 'select' && (
                       <>
-                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
+                        <span style={{ fontSize: compact ? 12 : 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <select
                           value={event[field.key] ? String(event[field.key]) : ''}
                           onChange={e => patch({ [field.key]: e.target.value || null })}
@@ -264,7 +390,7 @@ export default function EventDetailPage() {
                     )}
                     {field.type === 'text' && (
                       <>
-                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
+                        <span style={{ fontSize: compact ? 12 : 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <input
                           type="text"
                           value={event[field.key] ? String(event[field.key]) : ''}
