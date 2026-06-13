@@ -687,20 +687,23 @@ export default function AdminDashboard() {
       {/* Events tab */}
       {tab === 'events' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', gap: 8, flex: 1, overflowX: 'auto', paddingBottom: 2 }}>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
               {statuses.map(s => (
                 <button key={s} onClick={() => setStatusFilter(s)} style={{ border: '1.5px solid', borderColor: statusFilter === s ? 'var(--brass)' : 'var(--rule)', background: statusFilter === s ? 'var(--brass)' : 'transparent', color: statusFilter === s ? '#fff' : 'var(--ink-3)', borderRadius: 99, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {s}
                 </button>
               ))}
             </div>
-            <button onClick={() => setCompact(c => !c)} style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
-              {compact ? 'Compact ✓' : 'Compact'}
-            </button>
-            <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
-              + Add Event
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button onClick={() => setCompact(c => !c)} style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
+                {compact ? 'Compact ✓' : 'Compact'}
+              </button>
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
+                + Add Event
+              </button>
+            </div>
           </div>
           <div className="card" style={{ overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -708,12 +711,12 @@ export default function AdminDashboard() {
                 <tr style={{ background: 'var(--paper)' }}>
                   <PlainTh label="Client" />
                   <SortTh label="Event Date" field="event_date" sort={eventSort} onToggle={() => toggleEventSort('event_date')} />
-                  <PlainTh label="Venue" />
+                  {!compact && <PlainTh label="Venue" />}
                   <PlainTh label="Guests" />
                   <PlainTh label="Style" />
                   <PlainTh label="Status" />
                   <PlainTh label="Checklist" />
-                  <SortTh label="Submitted" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />
+                  {!compact && <SortTh label="Submitted" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />}
                   <PlainTh label="" />
                 </tr>
               </thead>
@@ -730,15 +733,15 @@ export default function AdminDashboard() {
                       style={{ cursor: 'pointer', borderBottom: '1px solid var(--paper-3)', transition: 'background 0.12s', animation: 'rowIn 0.15s ease', ...accent }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', fontWeight: 500, color: 'var(--ink)', fontSize: compact ? 12 : 'inherit' }}>{String(event.client_names)}</td>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap', fontSize: compact ? 12 : 'inherit' }}>
                         {fmt(dayDate)}
                         {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
                       </td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{totalGuests(event) || '—'}</td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.service_style) : '—'}</td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px' }} onClick={e => e.stopPropagation()}>
+                      {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>}
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-2)', textAlign: 'right', fontSize: compact ? 12 : 'inherit' }}>{totalGuests(event) || '—'}</td>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{day ? String(day.service_style) : '—'}</td>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px' }} onClick={e => e.stopPropagation()}>
                         {editingStatusId === String(event.id) ? (
                           <select
                             autoFocus
@@ -754,9 +757,9 @@ export default function AdminDashboard() {
                           <StatusBadge status={String(event.status)} onClick={e => { e.stopPropagation(); setEditingStatusId(String(event.id)); }} />
                         )}
                       </td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px' }}><ProgressBar event={event} /></td>
-                      <td style={{ padding: compact ? '7px 10px' : '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>
-                      <td style={{ padding: compact ? '7px 6px' : '12px 8px' }}>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px' }}><ProgressBar event={event} /></td>
+                      {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>}
+                      <td style={{ padding: compact ? '5px 6px' : '12px 8px' }}>
                         <TrashBtn onClick={e => { e.stopPropagation(); softDelete('event', String(event.id)); }} />
                       </td>
                     </tr>
