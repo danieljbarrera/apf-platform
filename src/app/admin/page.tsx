@@ -79,6 +79,19 @@ function TrashBtn({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   );
 }
 
+function SortTh({ label, field, sort, onToggle }: { label: string; field: string; sort: { field: string; dir: 'asc' | 'desc' }; onToggle: () => void }) {
+  const active = sort.field === field;
+  return (
+    <th onClick={onToggle} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: active ? 'var(--brass)' : 'var(--ink-4)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--rule)', cursor: 'pointer', userSelect: 'none' }}>
+      {label} {active ? (sort.dir === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+    </th>
+  );
+}
+
+function PlainTh({ label }: { label: string }) {
+  return <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--rule)' }}>{label}</th>;
+}
+
 function StatTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="card" style={{ padding: '1.1rem 1.4rem', flex: 1, minWidth: 140 }}>
@@ -213,8 +226,40 @@ export default function AdminDashboard() {
     reload();
   }
 
+  const [eventSort, setEventSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>({ field: 'created_at', dir: 'desc' });
+  const [leadSort, setLeadSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>({ field: 'created_at', dir: 'desc' });
+
+  function toggleEventSort(field: 'event_date' | 'created_at') {
+    setEventSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
+  }
+  function toggleLeadSort(field: 'event_date' | 'created_at') {
+    setLeadSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
+  }
+
   const statuses = ['All', 'New', 'Booked', 'Menu Development', 'EO', 'Completed', 'Lost'];
-  const filteredEvents = statusFilter === 'All' ? events : events.filter(e => e.status === statusFilter);
+
+  const filteredEvents = (statusFilter === 'All' ? events : events.filter(e => e.status === statusFilter))
+    .slice()
+    .sort((a, b) => {
+      let av: string, bv: string;
+      if (eventSort.field === 'event_date') {
+        const ad = ((a.event_days as Event[]) || []).sort((x, y) => String(x.event_date).localeCompare(String(y.event_date)))[0];
+        const bd = ((b.event_days as Event[]) || []).sort((x, y) => String(x.event_date).localeCompare(String(y.event_date)))[0];
+        av = ad ? String(ad.event_date) : '9999';
+        bv = bd ? String(bd.event_date) : '9999';
+      } else {
+        av = String(a.created_at || '');
+        bv = String(b.created_at || '');
+      }
+      return eventSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+
+  const sortedLeads = leads.slice().sort((a, b) => {
+    const av = String(leadSort.field === 'event_date' ? (a.event_date || '9999') : (a.created_at || ''));
+    const bv = String(leadSort.field === 'event_date' ? (b.event_date || '9999') : (b.created_at || ''));
+    return leadSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
   const trashCount = trash.leads.length + trash.events.length;
 
   function firstDay(event: Event) {
@@ -303,9 +348,14 @@ export default function AdminDashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--paper)' }}>
-                  {['Client', 'First Event Date', 'Venue', 'Guests', 'Style', 'Status', 'Checklist', ''].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--rule)' }}>{h}</th>
-                  ))}
+                  <PlainTh label="Client" />
+                  <SortTh label="Event Date" field="event_date" sort={eventSort} onToggle={() => toggleEventSort('event_date')} />
+                  <PlainTh label="Venue" />
+                  <PlainTh label="Guests" />
+                  <PlainTh label="Style" />
+                  <PlainTh label="Status" />
+                  <PlainTh label="Checklist" />
+                  <SortTh label="Received" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />
                 </tr>
               </thead>
               <tbody>
@@ -344,13 +394,19 @@ export default function AdminDashboard() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--paper)' }}>
-                {['Name', 'Email', 'Event Date', 'Guests', 'Style', 'Bar', 'Submitted', '', ''].map((h, i) => (
-                  <th key={i} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--rule)' }}>{h}</th>
-                ))}
+                <PlainTh label="Name" />
+                <PlainTh label="Email" />
+                <SortTh label="Event Date" field="event_date" sort={leadSort} onToggle={() => toggleLeadSort('event_date')} />
+                <PlainTh label="Guests" />
+                <PlainTh label="Style" />
+                <PlainTh label="Bar" />
+                <SortTh label="Submitted" field="created_at" sort={leadSort} onToggle={() => toggleLeadSort('created_at')} />
+                <PlainTh label="" />
+                <PlainTh label="" />
               </tr>
             </thead>
             <tbody>
-              {leads.map((lead) => (
+              {sortedLeads.map((lead) => (
                 <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
                   <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email)}</td>
