@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
         const dt = new Date(d.event_date + 'T12:00:00');
         return dt >= now && dt <= cutoff;
       });
-    });
+    }).length;
     return { days, count };
   });
 
