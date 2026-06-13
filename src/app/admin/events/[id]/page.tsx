@@ -286,6 +286,7 @@ export default function EventDetailPage() {
 
   if (loading || !event) return <div style={{ color: 'var(--ink-3)', fontSize: 14, padding: '2rem 0' }}>Loading...</div>;
 
+
   const days = ((event.event_days as Event[]) || []).sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
   const sc = STATUS_COLORS[String(event.status)] || STATUS_COLORS['New'];
 
@@ -299,6 +300,16 @@ export default function EventDetailPage() {
 
   return (
     <div>
+      <style>{`
+        @media (max-width: 640px) {
+          .phase-grid { grid-template-columns: 1fr !important; }
+          .field-row-side { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
+          .field-row-side input, .field-row-side select { width: 100% !important; font-size: 14px !important; padding: 7px 10px !important; }
+          .day-grid { grid-template-columns: 1fr !important; }
+          .event-header { flex-direction: column !important; align-items: flex-start !important; }
+          .event-header-actions { flex-wrap: wrap !important; }
+        }
+      `}</style>
       {/* Breadcrumb */}
       <div style={{ marginBottom: '1.25rem' }}>
         <button onClick={() => router.push('/admin')} style={{ background: 'none', border: 'none', color: 'var(--ink-4)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', padding: 0, letterSpacing: '0.04em' }}>
@@ -307,7 +318,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: 16 }}>
+      <div className="event-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.9rem', fontWeight: 500, marginBottom: 6 }}>{String(event.client_names)}</h1>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -315,7 +326,7 @@ export default function EventDetailPage() {
             {event.planner_email ? <span style={{ fontSize: 13, color: 'var(--brass)' }}>{String(event.planner_email)}</span> : null}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }} className="no-print">
+        <div className="event-header-actions no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
             {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? '✓ Saved' : ''}
           </span>
@@ -361,7 +372,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Event days — editable */}
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 3)}, 1fr)`, gap: 12, marginBottom: '1.75rem' }}>
+      <div className="day-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 3)}, 1fr)`, gap: 12, marginBottom: '1.75rem' }}>
         {days.map((day, i) => (
           <EditableDayCard
             key={String(day.id)}
@@ -375,7 +386,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Checklist phases */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: '1.5rem' }}>
+      <div className="phase-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: '1.5rem' }}>
         {PHASES.map(phase => {
           const { done, total } = phaseProgress(phase);
           const visibleFields = compact
@@ -405,8 +416,7 @@ export default function EventDetailPage() {
                       />
                     )}
                     {field.type === 'date' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
-                        <span style={{ width: 20, flexShrink: 0 }} />
+                      <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
                         <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <input
                           type="date"
@@ -417,8 +427,7 @@ export default function EventDetailPage() {
                       </div>
                     )}
                     {field.type === 'select' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
-                        <span style={{ width: 20, flexShrink: 0 }} />
+                      <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
                         <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <select
                           value={event[field.key] ? String(event[field.key]) : ''}
@@ -430,8 +439,7 @@ export default function EventDetailPage() {
                       </div>
                     )}
                     {field.type === 'text' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
-                        <span style={{ width: 20, flexShrink: 0 }} />
+                      <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
                         <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <input
                           type="text"
