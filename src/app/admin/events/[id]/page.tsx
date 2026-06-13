@@ -95,6 +95,52 @@ const PHASES = [
   },
 ];
 
+const SEGMENT_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  yes:     { bg: 'var(--green)',    color: '#fff',            border: 'var(--green)' },
+  partial: { bg: '#d97706',         color: '#fff',            border: '#d97706' },
+  no:      { bg: '#7c3030',         color: '#fff',            border: '#7c3030' },
+  'N/A':   { bg: 'var(--ink-3)',    color: '#fff',            border: 'var(--ink-3)' },
+};
+
+function SegmentedSelect({ value, options, label, onChange }: {
+  value: string; options: string[]; label: string;
+  onChange: (v: string) => void;
+}) {
+  const displayOptions = options.filter(o => o !== '');
+  const active = SEGMENT_COLORS[value] || null;
+  return (
+    <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px' }}>
+      <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{label}</span>
+      <div style={{ display: 'flex', borderRadius: 99, overflow: 'hidden', border: '1px solid var(--rule)', flexShrink: 0 }}>
+        {displayOptions.map(opt => {
+          const isActive = value === opt;
+          const c = SEGMENT_COLORS[opt];
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onChange(isActive ? '' : opt)}
+              style={{
+                padding: '4px 12px', fontSize: 11, fontWeight: isActive ? 600 : 400,
+                border: 'none', borderRight: '1px solid var(--rule)', cursor: 'pointer',
+                fontFamily: 'var(--sans)', letterSpacing: '0.04em',
+                background: isActive && c ? c.bg : 'var(--paper)',
+                color: isActive && c ? c.color : 'var(--ink-4)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+      {active && (
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: active.bg, flexShrink: 0 }} />
+      )}
+    </div>
+  );
+}
+
 function CheckItem({ checked, label, onChange }: { checked: boolean; label: string; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -427,16 +473,12 @@ export default function EventDetailPage() {
                       </div>
                     )}
                     {field.type === 'select' && (
-                      <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
-                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
-                        <select
-                          value={event[field.key] ? String(event[field.key]) : ''}
-                          onChange={e => patch({ [field.key]: e.target.value || null })}
-                          style={{ width: 'auto', fontSize: 12, padding: '3px 22px 3px 6px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}
-                        >
-                          {(field.options || []).map(o => <option key={o} value={o}>{o || '—'}</option>)}
-                        </select>
-                      </div>
+                      <SegmentedSelect
+                        label={field.label}
+                        value={event[field.key] ? String(event[field.key]) : ''}
+                        options={field.options || []}
+                        onChange={v => patch({ [field.key]: v || null })}
+                      />
                     )}
                     {field.type === 'text' && (
                       <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
