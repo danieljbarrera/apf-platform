@@ -95,6 +95,46 @@ const PHASES = [
   },
 ];
 
+function CheckItem({ checked, label, onChange }: { checked: boolean; label: string; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+        background: checked ? 'var(--green-lt)' : 'transparent',
+        border: 'none', borderRadius: 'var(--r-sm)',
+        padding: '7px 8px', cursor: 'pointer', textAlign: 'left',
+        transition: 'background 0.15s',
+      }}
+    >
+      <span style={{
+        width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: checked ? 'var(--green)' : 'transparent',
+        border: checked ? '2px solid var(--green)' : '2px solid var(--ink-4)',
+        transition: 'all 0.15s',
+      }}>
+        {checked && (
+          <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+            <path d="M1 4.5L4 7.5L10 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+      <span style={{
+        fontSize: 12.5, flex: 1, fontFamily: 'var(--sans)',
+        color: checked ? 'var(--green)' : 'var(--ink-2)',
+        fontWeight: checked ? 500 : 400,
+        transition: 'color 0.15s',
+      }}>
+        {label}
+      </span>
+      {/* doc slot — placeholder for future attachment */}
+      <span style={{ width: 16, flexShrink: 0 }} />
+    </button>
+  );
+}
+
 function PhaseRing({ done, total }: { done: number; total: number }) {
   const r = 10;
   const circ = 2 * Math.PI * r;
@@ -349,36 +389,37 @@ export default function EventDetailPage() {
               </div>
               <div style={{ padding: compact ? '0.5rem 1.3rem' : '0.75rem 1.3rem' }}>
                 {visibleFields.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--green)', padding: '4px 0' }}>✓ All complete</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px' }}>
+                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4.5L4 7.5L10 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 500 }}>All complete</span>
+                  </div>
                 ) : visibleFields.map(field => (
-                  <div key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: rowPad, borderBottom: '1px solid var(--paper-2)' }}>
+                  <div key={field.key} style={{ borderBottom: '1px solid var(--paper-2)' }}>
                     {field.type === 'bool' && (
-                      <>
-                        <input
-                          type="checkbox"
-                          checked={event[field.key] === true}
-                          onChange={e => patch({ [field.key]: e.target.checked })}
-                          style={{ width: 15, height: 15, accentColor: 'var(--brass)', cursor: 'pointer', flexShrink: 0 }}
-                        />
-                        <span style={{ fontSize: compact ? 12 : 12.5, color: event[field.key] === true ? 'var(--ink)' : 'var(--ink-3)', flex: 1, textDecoration: event[field.key] === true ? 'line-through' : 'none', textDecorationColor: 'var(--ink-4)' }}>
-                          {field.label}
-                        </span>
-                      </>
+                      <CheckItem
+                        checked={event[field.key] === true}
+                        label={field.label}
+                        onChange={v => patch({ [field.key]: v })}
+                      />
                     )}
                     {field.type === 'date' && (
-                      <>
-                        <span style={{ fontSize: compact ? 12 : 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
+                        <span style={{ width: 20, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <input
                           type="date"
                           value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
                           onChange={e => patch({ [field.key]: e.target.value || null })}
                           style={{ width: 'auto', fontSize: 12, padding: '3px 6px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}
                         />
-                      </>
+                      </div>
                     )}
                     {field.type === 'select' && (
-                      <>
-                        <span style={{ fontSize: compact ? 12 : 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
+                        <span style={{ width: 20, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <select
                           value={event[field.key] ? String(event[field.key]) : ''}
                           onChange={e => patch({ [field.key]: e.target.value || null })}
@@ -386,11 +427,12 @@ export default function EventDetailPage() {
                         >
                           {(field.options || []).map(o => <option key={o} value={o}>{o || '—'}</option>)}
                         </select>
-                      </>
+                      </div>
                     )}
                     {field.type === 'text' && (
-                      <>
-                        <span style={{ fontSize: compact ? 12 : 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
+                        <span style={{ width: 20, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
                         <input
                           type="text"
                           value={event[field.key] ? String(event[field.key]) : ''}
@@ -398,7 +440,7 @@ export default function EventDetailPage() {
                           placeholder="—"
                           style={{ width: 120, fontSize: 12, padding: '3px 6px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}
                         />
-                      </>
+                      </div>
                     )}
                   </div>
                 ))}
