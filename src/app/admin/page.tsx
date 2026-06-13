@@ -379,7 +379,7 @@ function AddEventModal({ onClose, onSaved, authFetch }: {
   onClose: () => void; onSaved: (eventId: string) => void;
   authFetch: (url: string, opts?: RequestInit) => Promise<Response>;
 }) {
-  const [form, setForm] = useState({ client_names: '', status: 'New', event_date: '', venue: '', guests: '', service_style: 'Buffet' });
+  const [form, setForm] = useState({ client_names: '', status: 'New', event_date: '', venue: '', guests: '', service_style: 'Buffet', planner_name: '', planner_email: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -398,7 +398,7 @@ function AddEventModal({ onClose, onSaved, authFetch }: {
     const res = await authFetch('/api/admin/events', {
       method: 'POST',
       body: JSON.stringify({
-        event: { client_names: form.client_names, status: form.status },
+        event: { client_names: form.client_names, status: form.status, planner_name: form.planner_name || null, planner_email: form.planner_email || null },
         days: [{ event_date: form.event_date, venue: form.venue, guests: form.guests ? Number(form.guests) : null, service_style: form.service_style, sort_order: 0 }],
       }),
     });
@@ -427,6 +427,10 @@ function AddEventModal({ onClose, onSaved, authFetch }: {
             <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Guests</label><input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} /></div>
           </div>
           <div className="field" style={{ marginBottom: 14 }}><label>Venue *</label><input value={form.venue} onChange={e => set('venue', e.target.value)} placeholder="Venue name" /></div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Planner name</label><input value={form.planner_name} onChange={e => set('planner_name', e.target.value)} placeholder="Optional" /></div>
+            <div className="field" style={{ flex: 1, marginBottom: 14 }}><label>Planner email</label><input type="email" value={form.planner_email} onChange={e => set('planner_email', e.target.value)} placeholder="Optional" /></div>
+          </div>
           <div className="field" style={{ marginBottom: 14 }}>
             <label>Service style</label>
             <select value={form.service_style} onChange={e => set('service_style', e.target.value)}>
