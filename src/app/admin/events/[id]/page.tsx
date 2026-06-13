@@ -462,14 +462,26 @@ export default function EventDetailPage() {
                       />
                     )}
                     {field.type === 'date' && (
-                      <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '4px 8px' : '6px 8px' }}>
+                      <div className="field-row-side" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: compact ? '4px 8px' : '6px 8px' }}>
                         <span style={{ fontSize: 12.5, color: 'var(--ink-3)', flex: 1 }}>{field.label}</span>
-                        <input
-                          type="date"
-                          value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
-                          onChange={e => patch({ [field.key]: e.target.value || null })}
-                          style={{ width: 'auto', fontSize: 12, padding: '3px 6px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input
+                            type="date"
+                            value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
+                            onChange={e => patch({ [field.key]: e.target.value || null })}
+                            style={{ width: 'auto', fontSize: 12, padding: '3px 6px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
+                          />
+                          {!!event[field.key] && (
+                            <button
+                              type="button"
+                              onClick={() => patch({ [field.key]: null })}
+                              title="Clear date"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 14, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--r-sm)', fontFamily: 'var(--sans)' }}
+                              onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
+                              onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-4)')}
+                            >×</button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {field.type === 'select' && (
