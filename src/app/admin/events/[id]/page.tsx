@@ -482,7 +482,7 @@ export default function EventDetailPage() {
                             type="date"
                             value={event[field.key] ? String(event[field.key]).split('T')[0] : ''}
                             onChange={e => patch({ [field.key]: e.target.value || null })}
-                            style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '7px 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
+                            style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '7px 10px', background: event[field.key] ? 'var(--paper)' : 'var(--paper-2)', border: event[field.key] ? '1px solid var(--rule)' : '1.5px dashed var(--brass-lt)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
                           />
                           {!!event[field.key] && (
                             <button
