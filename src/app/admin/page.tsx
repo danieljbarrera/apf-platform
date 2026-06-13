@@ -495,6 +495,7 @@ export default function AdminDashboard() {
                       <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.service_style) : '—'}</td>
                       <td style={{ padding: '12px 16px' }}><StatusBadge status={String(event.status)} /></td>
                       <td style={{ padding: '12px 16px' }}><ProgressBar event={event} /></td>
+                      <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>
                       <td style={{ padding: '12px 8px' }}>
                         <TrashBtn onClick={e => { e.stopPropagation(); softDelete('event', String(event.id)); }} />
                       </td>
@@ -502,7 +503,7 @@ export default function AdminDashboard() {
                   );
                 })}
                 {filteredEvents.length === 0 && (
-                  <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No events found</td></tr>
+                  <tr><td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No events found</td></tr>
                 )}
               </tbody>
             </table>
