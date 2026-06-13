@@ -117,13 +117,58 @@ export async function POST(req: NextRequest) {
         auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
       });
 
-      await transporter.sendMail({
-        from: 'All Purpose Flower <info@allpurposeflowerco.com>',
-        to: email,
-        bcc: 'danieljbarrera@gmail.com',
-        subject: `Your All Purpose Flower Estimate — ${quoteId}`,
-        html,
-      });
+      const styleRows = ['Buffet', 'Family Style', 'Plated'].map(s => {
+        const p = packages[s as keyof typeof packages];
+        return `<tr><td style="padding:7px 14px;border-bottom:1px solid #ede8df;color:#3b382f;">${s}${s === preferred_style ? `<span style="color:#97784c;font-size:11px;"> ← preferred</span>` : ''}</td><td style="padding:7px 14px;border-bottom:1px solid #ede8df;text-align:right;font-weight:600;">${fmtD(p.total)}</td></tr>`;
+      }).join('');
+
+      const ownerHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#faf8f3;font-family:Georgia,serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <tr><td style="background:#161410;border-radius:10px 10px 0 0;padding:24px 32px;">
+    <div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#97784c;margin-bottom:6px;">New Lead (Manual Entry)</div>
+    <div style="font-size:22px;color:#fff;">${first_name} ${last_name}</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">${quoteId}</div>
+  </td></tr>
+  <tr><td style="background:#fff;padding:24px 32px;border:1px solid #e7dfcf;border-top:none;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;width:130px;">Email</td><td style="padding:6px 0;font-size:13px;"><a href="mailto:${email}" style="color:#97784c;">${email || '—'}</a></td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Phone</td><td style="padding:6px 0;font-size:13px;">${phone || '—'}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Event date</td><td style="padding:6px 0;font-size:13px;">${eventDateFmt || '—'}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Guests</td><td style="padding:6px 0;font-size:13px;">${g}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Duration</td><td style="padding:6px 0;font-size:13px;">${h} hours</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Style</td><td style="padding:6px 0;font-size:13px;font-weight:600;">${preferred_style}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Bar</td><td style="padding:6px 0;font-size:13px;">${bar_package && bar_package !== 'None' ? bar_package : '—'}</td></tr>
+      ${notes ? `<tr><td style="padding:6px 0;font-size:13px;color:#79715f;vertical-align:top;">Notes</td><td style="padding:6px 0;font-size:13px;">${notes}</td></tr>` : ''}
+      <tr><td style="padding:6px 0;font-size:13px;color:#79715f;">Estimate sent</td><td style="padding:6px 0;font-size:13px;">${send_email && email ? 'Yes' : 'No'}</td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="background:#fff;padding:0 32px 24px;border:1px solid #e7dfcf;border-top:none;">
+    <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#97784c;margin-bottom:10px;">Quote Totals</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e7dfcf;border-radius:8px;overflow:hidden;border-collapse:separate;">
+      ${styleRows}
+      ${barQuote ? `<tr><td style="padding:7px 14px;">${bar_package}</td><td style="padding:7px 14px;text-align:right;font-weight:600;">${fmtD(barQuote.total)}</td></tr>` : ''}
+    </table>
+  </td></tr>
+  <tr><td style="background:#f1ece1;border:1px solid #e7dfcf;border-radius:0 0 10px 10px;padding:16px 32px;text-align:center;font-size:11px;color:#aaa292;">All Purpose Flower Platform · ${quoteId}</td></tr>
+</table></td></tr></table></body></html>`;
+
+      await Promise.all([
+        transporter.sendMail({
+          from: 'All Purpose Flower <info@allpurposeflowerco.com>',
+          to: email,
+          bcc: 'danieljbarrera@gmail.com',
+          subject: `Your All Purpose Flower Estimate — ${quoteId}`,
+          html,
+        }),
+        transporter.sendMail({
+          from: 'All Purpose Flower <info@allpurposeflowerco.com>',
+          to: 'info@allpurposeflowerco.com',
+          bcc: 'danieljbarrera@gmail.com',
+          subject: `New Lead (Manual): ${first_name} ${last_name} — ${g} guests${eventDateFmt ? ` · ${eventDateFmt}` : ''}`,
+          html: ownerHtml,
+        }),
+      ]);
     } catch (e) {
       console.error('Email send failed:', e);
       // don't fail the whole request — lead was saved

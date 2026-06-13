@@ -476,7 +476,7 @@ export default function AdminDashboard() {
                   <PlainTh label="Style" />
                   <PlainTh label="Status" />
                   <PlainTh label="Checklist" />
-                  <SortTh label="Received" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />
+                  <SortTh label="Submitted" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />
                   <PlainTh label="" />
                 </tr>
               </thead>
