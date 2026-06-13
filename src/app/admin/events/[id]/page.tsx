@@ -393,6 +393,9 @@ export default function EventDetailPage() {
           >
             {compact ? 'Compact ✓' : 'Compact'}
           </button>
+          <button onClick={() => router.push(`/admin/events/${id}/eo`)} style={{ background: 'var(--paper-2)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+            Event Order
+          </button>
           <button onClick={() => window.print()} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
             Print
           </button>
