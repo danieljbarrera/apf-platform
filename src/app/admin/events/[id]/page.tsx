@@ -484,16 +484,14 @@ export default function EventDetailPage() {
                             onChange={e => patch({ [field.key]: e.target.value || null })}
                             style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '7px 10px', background: event[field.key] ? 'var(--paper)' : 'var(--paper-2)', border: event[field.key] ? '1px solid var(--rule)' : '1.5px dashed var(--brass-lt)', borderRadius: 'var(--r-sm)', color: event[field.key] ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
                           />
-                          {!!event[field.key] && (
-                            <button
-                              type="button"
-                              onClick={() => patch({ [field.key]: null })}
-                              title="Clear date"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 14, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--r-sm)', fontFamily: 'var(--sans)' }}
-                              onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-                              onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-4)')}
-                            >×</button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => patch({ [field.key]: null })}
+                            title="Clear date"
+                            style={{ background: 'none', border: 'none', cursor: event[field.key] ? 'pointer' : 'default', color: 'var(--ink-4)', fontSize: 14, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--r-sm)', fontFamily: 'var(--sans)', visibility: event[field.key] ? 'visible' : 'hidden', flexShrink: 0 }}
+                            onMouseEnter={e => { if (event[field.key]) e.currentTarget.style.color = 'var(--red)'; }}
+                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-4)')}
+                          >×</button>
                         </div>
                       </div>
                     )}
