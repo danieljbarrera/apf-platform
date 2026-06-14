@@ -227,6 +227,8 @@ function EditableDayCard({
     venue: String(day.venue || ''),
     guests: String(day.guests || ''),
     service_style: String(day.service_style || ''),
+    day_type: String(day.day_type || 'Main'),
+    day_notes: String(day.day_notes || ''),
   });
   const [saving, setSaving] = useState(false);
 
@@ -239,6 +241,8 @@ function EditableDayCard({
         venue: form.venue || null,
         guests: form.guests ? Number(form.guests) : null,
         service_style: form.service_style || null,
+        day_type: form.day_type || 'Main',
+        day_notes: form.day_notes || null,
       }),
     });
     setSaving(false);
@@ -247,25 +251,35 @@ function EditableDayCard({
   }
 
   function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
+  const dayType = String(day.day_type || 'Main');
+  const isMain = dayType === 'Main';
+  const typeLabel = isMain ? (total > 1 ? `Day ${index + 1}` : 'Event Day') : dayType;
+  const DAY_TYPES = ['Main', 'Tasting', 'Rehearsal Dinner', 'Drop-off', 'Other'];
 
   if (editing) {
     return (
       <div className="card" style={{ padding: '1.1rem 1.3rem', border: '1.5px solid var(--brass-lt)' }}>
         <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 10 }}>
-          {total > 1 ? `Day ${index + 1}` : 'Event Day'}
+          {typeLabel}
         </div>
         <div style={{ display: 'grid', gap: 8 }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 10 }}>Type</label>
+            <select value={form.day_type} onChange={e => set('day_type', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }}>
+              {DAY_TYPES.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
           <div className="field" style={{ margin: 0 }}>
             <label style={{ fontSize: 10 }}>Date</label>
             <input type="date" value={form.event_date} onChange={e => set('event_date', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }} />
           </div>
           <div className="field" style={{ margin: 0 }}>
-            <label style={{ fontSize: 10 }}>Venue</label>
+            <label style={{ fontSize: 10 }}>{form.day_type === 'Tasting' ? 'Location' : 'Venue'}</label>
             <input type="text" value={form.venue} onChange={e => set('venue', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <div className="field" style={{ margin: 0, flex: 1 }}>
-              <label style={{ fontSize: 10 }}>Guests</label>
+              <label style={{ fontSize: 10 }}>{form.day_type === 'Tasting' ? 'Attendees' : 'Guests'}</label>
               <input type="number" min="1" value={form.guests} onChange={e => set('guests', e.target.value)} style={{ fontSize: 12, padding: '5px 8px' }} />
             </div>
             <div className="field" style={{ margin: 0, flex: 1 }}>
@@ -275,6 +289,10 @@ function EditableDayCard({
                 {['Buffet', 'Family Style', 'Plated'].map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 10 }}>Notes</label>
+            <input type="text" value={form.day_notes} onChange={e => set('day_notes', e.target.value)} placeholder="Optional" style={{ fontSize: 12, padding: '5px 8px' }} />
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button onClick={() => setEditing(false)} style={{ flex: 1, background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Cancel</button>
@@ -286,10 +304,10 @@ function EditableDayCard({
   }
 
   return (
-    <div className="card" style={{ padding: '1.1rem 1.3rem', cursor: 'pointer', position: 'relative' }} onClick={() => setEditing(true)}>
+    <div className="card" style={{ padding: '1.1rem 1.3rem', cursor: 'pointer', position: 'relative', borderLeft: isMain ? undefined : '3px solid var(--brass-lt)' }} onClick={() => setEditing(true)}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 6 }}>
-          {total > 1 ? `Day ${index + 1}` : 'Event Day'}
+        <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: isMain ? 'var(--brass)' : 'var(--ink-3)', fontWeight: 600, marginBottom: 6 }}>
+          {typeLabel}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {onDelete && (
@@ -303,8 +321,9 @@ function EditableDayCard({
       <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', marginBottom: 4 }}>{fmt(String(day.event_date))}</div>
       <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 2 }}>{String(day.venue || '—')}</div>
       <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>
-        {day.guests ? `${day.guests} guests` : ''} {day.service_style ? `· ${day.service_style}` : ''}
+        {day.guests ? `${day.guests} ${isMain ? 'guests' : 'attendees'}` : ''} {day.service_style ? `· ${day.service_style}` : ''}
       </div>
+      {!!day.day_notes && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, fontStyle: 'italic' }}>{String(day.day_notes)}</div>}
     </div>
   );
 }
@@ -499,21 +518,27 @@ export default function EventDetailPage() {
           />
         ))}
       </div>
-      <div style={{ marginBottom: '1.75rem' }}>
-        <button
-          onClick={async () => {
-            await authFetch('/api/admin/event-days', {
-              method: 'POST',
-              body: JSON.stringify({ event_id: id, sort_order: days.length }),
-            });
-            loadEvent();
-          }}
-          style={{ background: 'none', border: '1.5px dashed var(--rule)', borderRadius: 'var(--r-md)', padding: '8px 18px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)', width: '100%' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brass)'; e.currentTarget.style.color = 'var(--brass)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--rule)'; e.currentTarget.style.color = 'var(--ink-4)'; }}
-        >
-          + Add Day
-        </button>
+      <div style={{ marginBottom: '1.75rem', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {[
+          { label: '+ Add Day', type: 'Main' },
+          { label: '+ Tasting', type: 'Tasting' },
+          { label: '+ Rehearsal Dinner', type: 'Rehearsal Dinner' },
+        ].map(b => (
+          <button key={b.type}
+            onClick={async () => {
+              await authFetch('/api/admin/event-days', {
+                method: 'POST',
+                body: JSON.stringify({ event_id: id, sort_order: days.length, day_type: b.type }),
+              });
+              loadEvent();
+            }}
+            style={{ flex: 1, minWidth: 120, background: 'none', border: '1.5px dashed var(--rule)', borderRadius: 'var(--r-md)', padding: '8px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brass)'; e.currentTarget.style.color = 'var(--brass)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--rule)'; e.currentTarget.style.color = 'var(--ink-4)'; }}
+          >
+            {b.label}
+          </button>
+        ))}
       </div>
 
       {/* Checklist phases */}

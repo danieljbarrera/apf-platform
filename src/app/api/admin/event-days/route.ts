@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const user = await verifyAuth(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { event_id, event_date, venue, guests, service_style, sort_order } = await req.json();
+  const { event_id, event_date, venue, guests, service_style, sort_order, day_type, day_notes } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
   const { data, error } = await supabaseAdmin.from('event_days').insert({
@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
     guests: guests ? Number(guests) : null,
     service_style: service_style || null,
     sort_order: sort_order ?? 0,
+    day_type: day_type || 'Main',
+    day_notes: day_notes || null,
   }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

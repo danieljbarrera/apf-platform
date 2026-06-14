@@ -73,7 +73,8 @@ function firstDay(event: Event) {
 }
 
 function totalGuests(event: Event) {
-  return ((event.event_days as Event[]) || []).reduce((s, d) => s + (Number(d.guests) || 0), 0);
+  // Only count main catering days — tastings/rehearsals shouldn't inflate headcount
+  return ((event.event_days as Event[]) || []).filter(d => (d.day_type || 'Main') === 'Main').reduce((s, d) => s + (Number(d.guests) || 0), 0);
 }
 
 function rowAccent(event: Event): React.CSSProperties {

@@ -115,8 +115,9 @@ export default function EstimatePage() {
   if (loading || !event) return <div style={{ color: 'var(--ink-3)', fontSize: 14, padding: '2rem' }}>Loading…</div>;
 
   const days = ((event.event_days as Event[]) || []).sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
-  const dayGuests = days.reduce((s, d) => s + (Number(d.guests) || 0), 0);
-  const firstStyle = days[0]?.service_style ? String(days[0].service_style) : 'Buffet';
+  const mainDays = days.filter(d => (d.day_type || 'Main') === 'Main');
+  const dayGuests = mainDays.reduce((s, d) => s + (Number(d.guests) || 0), 0);
+  const firstStyle = mainDays[0]?.service_style ? String(mainDays[0].service_style) : 'Buffet';
 
   const guests = Number(event.estimate_guests) || dayGuests || 0;
   const cfg: Cfg = {

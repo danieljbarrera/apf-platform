@@ -106,7 +106,7 @@ export default function EventOrderPage() {
 
   const days = ((event.event_days as Event[]) || []).sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
   const firstDay = days[0];
-  const totalGuests = days.reduce((s, d) => s + (Number(d.guests) || 0), 0);
+  const totalGuests = days.filter(d => (d.day_type || 'Main') === 'Main').reduce((s, d) => s + (Number(d.guests) || 0), 0);
   const eoNum = eoNumber(event);
   const generatedDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
