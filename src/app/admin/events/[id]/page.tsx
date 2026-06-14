@@ -302,9 +302,6 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [squareLoading, setSquareLoading] = useState(false);
-  const [squareMsg, setSquareMsg] = useState('');
-
   const [compact, setCompact] = useState(() => {
     if (typeof window === 'undefined') return false;
     try { return JSON.parse(localStorage.getItem('apf-event-compact') || 'false'); } catch { return false; }
@@ -400,28 +397,10 @@ export default function EventDetailPage() {
           <button onClick={() => router.push(`/admin/events/${id}/eo`)} style={{ background: 'var(--paper-2)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
             Event Order
           </button>
-          {!!event.square_invoice_url ? (
-            <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer"
-              style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              View Square Invoice ↗
-            </a>
-          ) : (
-            <button
-              disabled={squareLoading}
-              onClick={async () => {
-                setSquareLoading(true); setSquareMsg('');
-                const res = await authFetch('/api/admin/square/invoice', { method: 'POST', body: JSON.stringify({ event_id: id }) });
-                const data = await res.json();
-                setSquareLoading(false);
-                if (!res.ok) { setSquareMsg(data.error || 'Failed'); return; }
-                setSquareMsg(data.already_exists ? 'Invoice already exists' : `Invoice created · $${Math.round(data.deposit).toLocaleString()} deposit`);
-                loadEvent();
-              }}
-              style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: squareLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: squareLoading ? 0.7 : 1 }}>
-              {squareLoading ? 'Creating…' : 'Create Square Invoice'}
-            </button>
-          )}
-          {squareMsg && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{squareMsg}</span>}
+          <button onClick={() => router.push(`/admin/events/${id}/estimate`)}
+            style={{ background: !!event.estimate_approved_at ? 'var(--green-lt)' : 'var(--paper-2)', border: `1px solid ${!!event.estimate_approved_at ? '#c4dccd' : 'var(--rule)'}`, borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: !!event.estimate_approved_at ? 'var(--green)' : 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+            {!!event.estimate_approved_at ? 'Estimate ✓' : 'Estimate'}
+          </button>
           <button onClick={() => window.print()} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
             Print
           </button>

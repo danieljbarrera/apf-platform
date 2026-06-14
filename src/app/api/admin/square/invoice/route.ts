@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { squareClient, squareLocationId } from '@/lib/square';
-import { calcPackage, calcBar } from '@/lib/pricing';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -45,15 +44,16 @@ export async function POST(req: NextRequest) {
   const firstDay = days[0];
   if (!firstDay) return NextResponse.json({ error: 'Event has no days' }, { status: 400 });
 
-  const guests = days.reduce((s, d) => s + (Number(d.guests) || 0), 0);
-  const style = String(firstDay.service_style || 'Buffet');
-  const hours = Number(event.event_hours) || 5;
-  const barPackage = event.bar_package ? String(event.bar_package) : null;
+  // Require an approved estimate — the invoice must bill exactly what was approved
+  const approvedItems = event.estimate_line_items as { name: string; quantity: string; amount: number }[] | null;
+  if (!approvedItems || !event.estimate_approved_at) {
+    return NextResponse.json({ error: 'Approve the estimate before creating an invoice' }, { status: 400 });
+  }
 
-  const pkg = calcPackage(guests, hours, style, { appetizers: 0, dessert: false, coffee: false });
-  const bar = barPackage && ['Soft Bar', 'Full Bar'].includes(barPackage) ? calcBar(guests, barPackage) : null;
-  const grandTotal = pkg.total + (bar?.total || 0);
-  const deposit = Math.round(grandTotal * 0.25 * 100) / 100;
+  const guests = Number(event.estimate_guests) || days.reduce((s, d) => s + (Number(d.guests) || 0), 0);
+  const style = String(event.estimate_style || firstDay.service_style || 'Buffet');
+  const grandTotal = Number(event.estimate_total) || 0;
+  const deposit = Number(event.estimate_deposit) || Math.round(grandTotal * 0.25 * 100) / 100;
 
   const eventDate = new Date(String(firstDay.event_date) + 'T12:00:00');
   const today = new Date();
@@ -89,28 +89,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Build itemized line items
-    const serviceBase = pkg.subtotal + (bar?.subtotal || 0);
-    const lineItems: { name: string; quantity: string; basePriceMoney: { amount: bigint; currency: 'USD' } }[] = [
-      {
-        name: `Food — ${style} ($65/guest)`,
-        quantity: String(guests),
-        basePriceMoney: { amount: toCents(65), currency: 'USD' },
-      },
-      {
-        name: `Staffing — ${pkg.staffing.waitstaff} waitstaff + ${pkg.staffing.captain} captain × ${pkg.staffing.totalHours} hrs`,
-        quantity: '1',
-        basePriceMoney: { amount: toCents(pkg.staffing.cost), currency: 'USD' },
-      },
-    ];
-    if (pkg.apps > 0) lineItems.push({ name: 'Passed Appetizers', quantity: '1', basePriceMoney: { amount: toCents(pkg.apps), currency: 'USD' } });
-    if (pkg.dessert > 0) lineItems.push({ name: 'Dessert', quantity: '1', basePriceMoney: { amount: toCents(pkg.dessert), currency: 'USD' } });
-    if (pkg.coffee > 0) lineItems.push({ name: 'Coffee & Tea Service', quantity: '1', basePriceMoney: { amount: toCents(pkg.coffee), currency: 'USD' } });
-    if (pkg.minimumApplied) lineItems.push({ name: 'Event Minimum Adjustment', quantity: '1', basePriceMoney: { amount: toCents(pkg.subtotal - pkg.rawSubtotal), currency: 'USD' } });
-    if (bar) lineItems.push({ name: `Bar Package — ${barPackage} (${bar.bartenders} bartender${bar.bartenders > 1 ? 's' : ''})`, quantity: '1', basePriceMoney: { amount: toCents(bar.subtotal), currency: 'USD' } });
-    lineItems.push({ name: 'Service Fee (10%)', quantity: '1', basePriceMoney: { amount: toCents(serviceBase * 0.10), currency: 'USD' } });
-    lineItems.push({ name: 'Sales Tax (9.25%)', quantity: '1', basePriceMoney: { amount: toCents(serviceBase * 0.0925), currency: 'USD' } });
-    lineItems.push({ name: 'Card Processing (3.5%)', quantity: '1', basePriceMoney: { amount: toCents(serviceBase * 0.035), currency: 'USD' } });
+    // 2. Build line items from the APPROVED estimate (exact numbers she signed off on)
+    const lineItems = approvedItems.map(it => ({
+      name: it.name,
+      quantity: it.quantity || '1',
+      basePriceMoney: { amount: toCents(it.amount), currency: 'USD' as const },
+    }));
 
     // 3. Create order
     const orderResp = await squareClient.orders.create({
@@ -159,28 +143,25 @@ export async function POST(req: NextRequest) {
     const invoice = invoiceResp.invoice;
     if (!invoice?.id) return NextResponse.json({ error: 'Failed to create Square invoice' }, { status: 500 });
 
-    // 5. Publish invoice
-    const pubResp = await squareClient.invoices.publish({
-      invoiceId: invoice.id,
-      version: invoice.version ?? 0,
-      idempotencyKey: `apf-publish-${event_id}`,
-    });
+    // Leave as DRAFT — she reviews and sends from Square. Build a dashboard link
+    // (draft invoices have no public payment URL until published).
+    const dashHost = process.env.SQUARE_ENVIRONMENT === 'sandbox'
+      ? 'https://app.squareupsandbox.com'
+      : 'https://app.squareup.com';
+    const invoiceUrl = `${dashHost}/dashboard/invoices/${invoice.id}`;
 
-    const published = pubResp.invoice;
-    const invoiceUrl = published?.publicUrl ?? null;
-
-    // 6. Save to event
     await supabaseAdmin.from('events').update({
-      square_invoice_id: published?.id,
+      square_invoice_id: invoice.id,
       square_invoice_url: invoiceUrl,
       square_order_id: orderId,
     }).eq('id', event_id);
 
     return NextResponse.json({
-      invoice_id: published?.id,
+      invoice_id: invoice.id,
       invoice_url: invoiceUrl,
       deposit,
       grand_total: grandTotal,
+      draft: true,
     });
 
   } catch (e: unknown) {
