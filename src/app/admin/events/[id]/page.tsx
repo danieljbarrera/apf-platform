@@ -415,34 +415,40 @@ export default function EventDetailPage() {
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.9rem', fontWeight: 500, marginBottom: 6 }}>{String(event.client_names)}</h1>
           {!!event.quote_number && <div style={{ fontSize: 12, color: 'var(--ink-4)', letterSpacing: '0.04em' }}>Quote {String(event.quote_number)}</div>}
         </div>
-        <div className="event-header-actions no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
-            {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? '✓ Saved' : ''}
-          </span>
-          <button
-            onClick={() => setCompact((c: boolean) => !c)}
-            title="Toggle compact checklist view"
-            style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-3)', fontFamily: 'var(--sans)' }}
-          >
-            {compact ? 'Compact ✓' : 'Compact'}
-          </button>
-          <button onClick={() => router.push(`/admin/events/${id}/eo`)} style={{ background: 'var(--paper-2)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
-            Event Order
-          </button>
-          <button onClick={() => router.push(`/admin/events/${id}/estimate`)}
-            style={{ background: !!event.estimate_approved_at ? 'var(--green-lt)' : 'var(--paper-2)', border: `1px solid ${!!event.estimate_approved_at ? '#c4dccd' : 'var(--rule)'}`, borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: !!event.estimate_approved_at ? 'var(--green)' : 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
-            {!!event.estimate_approved_at ? 'Estimate ✓' : 'Estimate'}
-          </button>
-          <button onClick={() => window.print()} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
-            Print
-          </button>
-          <select
-            value={String(event.status)}
-            onChange={e => patch({ status: e.target.value })}
-            style={{ background: sc.bg, color: sc.color, border: `1.5px solid ${sc.color}`, borderRadius: 99, padding: '6px 28px 6px 14px', fontSize: 12, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: 'var(--sans)', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+        <div className="event-header-actions no-print" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+          {/* Primary row: documents + status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
+              {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? '✓ Saved' : ''}
+            </span>
+            <button onClick={() => router.push(`/admin/events/${id}/estimate`)}
+              style={{ background: !!event.estimate_approved_at ? 'var(--green-lt)' : 'var(--paper-2)', border: `1px solid ${!!event.estimate_approved_at ? '#c4dccd' : 'var(--rule)'}`, borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: !!event.estimate_approved_at ? 'var(--green)' : 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+              {!!event.estimate_approved_at ? 'Estimate ✓' : 'Estimate'}
+            </button>
+            <button onClick={() => router.push(`/admin/events/${id}/eo`)} style={{ background: 'var(--paper-2)', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+              Event Order
+            </button>
+            <select
+              value={String(event.status)}
+              onChange={e => patch({ status: e.target.value })}
+              style={{ background: sc.bg, color: sc.color, border: `1.5px solid ${sc.color}`, borderRadius: 99, padding: '6px 28px 6px 14px', fontSize: 12, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: 'var(--sans)', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+            >
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          {/* Secondary row: view controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={() => setCompact((c: boolean) => !c)}
+              title="Toggle compact checklist view"
+              style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11.5, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)' }}
+            >
+              {compact ? 'Compact ✓' : 'Compact'}
+            </button>
+            <button onClick={() => window.print()} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11.5, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>
+              Print
+            </button>
+          </div>
         </div>
       </div>
 

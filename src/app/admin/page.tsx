@@ -138,11 +138,23 @@ function ProgressBar({ event }: { event: Event }) {
 }
 
 function DepositPaid({ event }: { event: Event }) {
-  if (!event.deposit_paid_at) return null;
-  const balance = !!event.balance_paid_at;
+  // Paid states (green) take priority, then invoice lifecycle (amber/gray)
+  if (event.balance_paid_at) return <PayPill label="PAID" title="Paid in full" tone="green" />;
+  if (event.deposit_paid_at) return <PayPill label="$ ✓" title="Deposit paid" tone="green" />;
+  const st = event.square_invoice_status ? String(event.square_invoice_status) : null;
+  if (st === 'UNPAID' || st === 'SCHEDULED') return <PayPill label="INVOICED" title="Invoice sent · awaiting payment" tone="amber" />;
+  if (st === 'DRAFT') return <PayPill label="DRAFT" title="Invoice draft (not sent)" tone="gray" />;
+  if (st === 'CANCELED') return <PayPill label="CANCELED" title="Invoice canceled" tone="gray" />;
+  return null;
+}
+
+function PayPill({ label, title, tone }: { label: string; title: string; tone: 'green' | 'amber' | 'gray' }) {
+  const c = tone === 'green' ? { color: 'var(--green)', bg: 'var(--green-lt)', bd: '#c4dccd' }
+    : tone === 'amber' ? { color: '#b45309', bg: '#fff7ed', bd: '#f0d8b8' }
+    : { color: '#79715f', bg: '#f4f4f4', bd: 'var(--rule)' };
   return (
-    <span title={balance ? 'Paid in full' : 'Deposit paid'} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '2px 7px', whiteSpace: 'nowrap' }}>
-      {balance ? 'PAID' : '$ ✓'}
+    <span title={title} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: c.color, background: c.bg, border: `1px solid ${c.bd}`, borderRadius: 99, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+      {label}
     </span>
   );
 }
