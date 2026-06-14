@@ -244,10 +244,24 @@ function ConvertModal({ lead, onClose, onConverted, authFetch }: {
     if (!venue.trim()) { setError('Venue is required'); return; }
     setSaving(true); setError('');
     const clientNames = `${lead.first_name} ${lead.last_name}`.trim();
+    // Carry the quote's pricing inputs into the estimate config so the consult
+    // starts pre-filled from the client's submission instead of blank.
+    const barPkg = lead.bar_package && lead.bar_package !== 'None' ? String(lead.bar_package) : null;
     const res = await authFetch('/api/admin/events', {
       method: 'POST',
       body: JSON.stringify({
-        event: { client_names: clientNames, status: 'New', client_email: lead.email || null, client_phone: lead.phone || null, quote_id: lead.id, quote_number: lead.quote_number || null },
+        event: {
+          client_names: clientNames, status: 'New',
+          client_email: lead.email || null, client_phone: lead.phone || null,
+          quote_id: lead.id, quote_number: lead.quote_number || null,
+          estimate_guests: lead.guests ? Number(lead.guests) : null,
+          estimate_style: lead.preferred_style || null,
+          event_hours: lead.hours ? Number(lead.hours) : null,
+          bar_package: barPkg,
+          appetizer_count: Number(lead.appetizers ?? lead.appetizer_count ?? 0),
+          include_dessert: !!(lead.dessert ?? lead.include_dessert),
+          include_coffee: !!(lead.coffee_tea ?? lead.include_coffee),
+        },
         days: [{ event_date: lead.event_date, venue: venue.trim(), guests: lead.guests, service_style: lead.preferred_style, sort_order: 0 }],
       }),
     });
