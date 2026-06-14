@@ -505,7 +505,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
 
   const [tab, setTab] = useState<'events' | 'leads' | 'trash'>(() => lsGet('apf-tab', 'events' as 'events'));
-  const [statusFilter, setStatusFilter] = useState<string>(() => lsGet('apf-status-filter', 'All'));
+  const [statusFilter, setStatusFilter] = useState<string>(() => lsGet('apf-status-filter-v2', 'Active'));
   const [eventSort, setEventSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>(() => lsGet('apf-event-sort', { field: 'created_at', dir: 'desc' }));
   const [leadSort, setLeadSort] = useState<{ field: 'event_date' | 'created_at'; dir: 'asc' | 'desc' }>(() => lsGet('apf-lead-sort', { field: 'created_at', dir: 'desc' }));
 
@@ -532,7 +532,7 @@ export default function AdminDashboard() {
   // Persist UI state to localStorage
   useEffect(() => { localStorage.setItem('apf-compact', JSON.stringify(compact)); }, [compact]);
   useEffect(() => { localStorage.setItem('apf-tab', JSON.stringify(tab)); }, [tab]);
-  useEffect(() => { localStorage.setItem('apf-status-filter', JSON.stringify(statusFilter)); }, [statusFilter]);
+  useEffect(() => { localStorage.setItem('apf-status-filter-v2', JSON.stringify(statusFilter)); }, [statusFilter]);
   useEffect(() => { localStorage.setItem('apf-event-sort', JSON.stringify(eventSort)); }, [eventSort]);
   useEffect(() => { localStorage.setItem('apf-lead-sort', JSON.stringify(leadSort)); }, [leadSort]);
   useEffect(() => { document.title = 'Dashboard | APF Admin'; }, []);
@@ -627,7 +627,11 @@ export default function AdminDashboard() {
 
   const q = search.toLowerCase();
 
-  const filteredEvents = (statusFilter === 'All' ? events : events.filter(e => e.status === statusFilter))
+  const filteredEvents = (
+    statusFilter === 'All' ? events
+    : statusFilter === 'Active' ? events.filter(e => !['Completed', 'Lost'].includes(String(e.status)))
+    : events.filter(e => e.status === statusFilter)
+  )
     .filter(e => !q || String(e.client_names).toLowerCase().includes(q) || String(e.quote_number || '').toLowerCase().includes(q) || ((e.event_days as Event[]) || []).some(d => String(d.venue).toLowerCase().includes(q)))
     .slice().sort((a, b) => {
       let av: string, bv: string;
@@ -650,7 +654,7 @@ export default function AdminDashboard() {
     });
 
   const trashCount = trash.leads.length + trash.events.length;
-  const statuses = ['All', ...STATUSES];
+  const statuses = ['Active', 'All', ...STATUSES];
 
   return (
     <div>
@@ -733,6 +737,9 @@ export default function AdminDashboard() {
         <div style={{ flex: 1 }} />
       </div>
 
+      {/* Responsive table↔cards toggle — global so it applies on every tab */}
+      <style>{`.event-table-wrap { display: block; } .event-cards-wrap { display: none; } @media (max-width: 640px) { .event-table-wrap { display: none; } .event-cards-wrap { display: block; } }`}</style>
+
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
         {(['events', 'leads', 'trash'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--brass)' : '2px solid transparent', padding: '10px 20px', fontSize: 13, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--brass)' : 'var(--ink-3)', cursor: 'pointer', fontFamily: 'var(--sans)', marginBottom: -1, letterSpacing: '0.04em' }}>
@@ -764,8 +771,6 @@ export default function AdminDashboard() {
             </div>
           </div>
           {/* Mobile cards */}
-          <style>{`.event-table-wrap { display: block; } .event-cards-wrap { display: none; } @media (max-width: 640px) { .event-table-wrap { display: none; } .event-cards-wrap { display: block; } }`}</style>
-
           <div className="event-cards-wrap">
             {loading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -858,9 +863,9 @@ export default function AdminDashboard() {
                         {fmt(dayDate)}
                         {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
                       </td>
-                      {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day ? String(day.venue) : '—'}</td>}
+                      {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{day?.venue ? String(day.venue) : '—'}</td>}
                       <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-2)', textAlign: 'right', fontSize: compact ? 12 : 'inherit' }}>{totalGuests(event) || '—'}</td>
-                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{day ? String(day.service_style) : '—'}</td>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{day?.service_style ? String(day.service_style) : '—'}</td>
                       <td style={{ padding: compact ? '5px 10px' : '12px 16px' }} onClick={e => e.stopPropagation()}>
                         {editingStatusId === String(event.id) ? (
                           <select autoFocus defaultValue={String(event.status)}
