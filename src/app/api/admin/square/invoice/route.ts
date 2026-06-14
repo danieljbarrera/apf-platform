@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { squareFor, dashHostFor, type SquareEnv } from '@/lib/square';
 import { getSquareMode } from '@/lib/settings';
+import { rollupEvent } from '@/lib/rollup';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   const user = await verifyAuth(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { event_id } = await req.json();
+  const { event_id, day_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
   const { data: event, error: evErr } = await supabaseAdmin
@@ -32,49 +33,47 @@ export async function POST(req: NextRequest) {
     .single();
   if (evErr || !event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
 
+  // Each invoice belongs to a specific day. Default to the Main day.
+  const days = ((event.event_days || []) as Record<string, unknown>[])
+    .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
+  const targetDay = day_id
+    ? days.find(d => String(d.id) === String(day_id))
+    : days.filter(d => (d.day_type || 'Main') === 'Main')[0] || days[0];
+  if (!targetDay) return NextResponse.json({ error: 'Event has no days' }, { status: 400 });
+  const firstDay = targetDay;
+
   // New invoices use the current mode; cleanup of an existing one uses ITS env.
   const mode = await getSquareMode();
   const { client: squareClient, locationId: squareLocationId } = squareFor(mode);
 
-  // If an invoice is already linked, clean it up before making a new one so we
-  // never accumulate orphaned invoices in Square. Refuse if it's already been paid.
-  if (event.square_invoice_id) {
-    const prevEnv = (event.square_env as SquareEnv) || mode;
+  // If this day already has an invoice, clean it up first. Refuse if paid.
+  if (targetDay.square_invoice_id) {
+    const prevEnv = (targetDay.square_env as SquareEnv) || mode;
     const { client: prevClient } = squareFor(prevEnv);
     try {
-      const existing = await prevClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
+      const existing = await prevClient.invoices.get({ invoiceId: String(targetDay.square_invoice_id) });
       const inv = existing.invoice;
       const st = inv?.status;
       if (st === 'PAID' || st === 'PARTIALLY_PAID') {
         return NextResponse.json({ error: 'This invoice has already been paid — cancel it in Square manually before recreating.' }, { status: 400 });
       }
       if (inv?.id) {
-        if (st === 'DRAFT') {
-          await prevClient.invoices.delete({ invoiceId: inv.id, version: inv.version ?? 0 });
-        } else if (st !== 'CANCELED') {
-          await prevClient.invoices.cancel({ invoiceId: inv.id, version: inv.version ?? 0 });
-        }
+        if (st === 'DRAFT') await prevClient.invoices.delete({ invoiceId: inv.id, version: inv.version ?? 0 });
+        else if (st !== 'CANCELED') await prevClient.invoices.cancel({ invoiceId: inv.id, version: inv.version ?? 0 });
       }
     } catch (e) {
       console.error('Failed to clean up existing invoice:', e);
-      // Continue — if it's already gone, that's fine
     }
-    await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }).eq('id', event_id);
+    await supabaseAdmin.from('event_days').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }).eq('id', targetDay.id);
   }
 
   // Square requires the recipient to have an email or phone to publish an invoice
   if (!event.client_email && !event.client_phone) {
     return NextResponse.json({ error: 'Add a client email or phone on the event before creating an invoice — Square needs it to send the invoice.' }, { status: 400 });
   }
-
-  const days = ((event.event_days || []) as Record<string, unknown>[])
-    .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
-  const firstDay = days[0];
-  if (!firstDay) return NextResponse.json({ error: 'Event has no days' }, { status: 400 });
-
-  // Require an approved estimate — the invoice must bill exactly what was approved
-  const approvedItems = event.estimate_line_items as { name: string; quantity: string; amount: number }[] | null;
-  if (!approvedItems || !approvedItems.length || !event.estimate_approved_at) {
+  // Require an approved estimate ON THIS DAY — the invoice bills exactly what was approved
+  const approvedItems = targetDay.estimate_line_items as { name: string; quantity: string; amount: number }[] | null;
+  if (!approvedItems || !approvedItems.length || !targetDay.estimate_approved_at) {
     return NextResponse.json({ error: 'Approve the estimate before creating an invoice' }, { status: 400 });
   }
 
@@ -83,10 +82,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Estimate total is $${itemsTotal.toFixed(2)} — must be between $0.01 and $1,000,000. Open the estimate, Unlock, recalculate, and re-approve.` }, { status: 400 });
   }
 
-  const guests = Number(event.estimate_guests) || days.reduce((s, d) => s + (Number(d.guests) || 0), 0);
-  const style = String(event.estimate_style || firstDay.service_style || 'Buffet');
-  const grandTotal = Number(event.estimate_total) || 0;
-  const deposit = Number(event.estimate_deposit) || Math.round(grandTotal * 0.25 * 100) / 100;
+  const guests = Number(targetDay.guests) || 0;
+  const style = String(targetDay.service_style || 'Buffet');
+  const grandTotal = Number(targetDay.estimate_total) || 0;
+  const deposit = Number(targetDay.estimate_deposit) || Math.round(grandTotal * 0.25 * 100) / 100;
 
   const eventDate = new Date(String(firstDay.event_date) + 'T12:00:00');
   const today = new Date();
@@ -106,7 +105,7 @@ export async function POST(req: NextRequest) {
 
   // Tie order/invoice idempotency to the approval moment, so re-approving after an
   // edit produces a NEW invoice rather than returning the previously created one.
-  const stamp = String(event.estimate_approved_at || Date.now()).replace(/\D/g, '').slice(0, 16);
+  const stamp = String(targetDay.id) + "-" + String(targetDay.estimate_approved_at || Date.now()).replace(/\D/g, '').slice(0, 16);
 
   try {
     // 1. Resolve the Square customer.
@@ -156,9 +155,9 @@ export async function POST(req: NextRequest) {
       }));
 
     // Apply discount as an order-level discount (Square line items can't be negative)
-    const discountAmt = Number(event.estimate_discount) || 0;
+    const discountAmt = Number(targetDay.estimate_discount) || 0;
     const orderDiscounts = discountAmt > 0 ? [{
-      name: event.estimate_discount_label ? String(event.estimate_discount_label) : 'Discount',
+      name: targetDay.estimate_discount_label ? String(targetDay.estimate_discount_label) : 'Discount',
       amountMoney: { amount: toCents(discountAmt), currency: 'USD' as const },
       scope: 'ORDER' as const,
     }] : undefined;
@@ -214,14 +213,16 @@ export async function POST(req: NextRequest) {
 
     // Leave as DRAFT — created is NOT the same as sent. She reviews, then explicitly
     // sends it (the /send endpoint publishes, which emails the client).
-    await supabaseAdmin.from('events').update({
+    await supabaseAdmin.from('event_days').update({
       square_invoice_id: invoice.id,
       square_invoice_url: `${dashHostFor(mode)}/dashboard/invoices/${invoice.id}`,
       square_invoice_status: 'DRAFT',
       square_order_id: orderId,
+      square_customer_id: customerId,
       square_env: mode,
       invoice_sent_at: null,
-    }).eq('id', event_id);
+    }).eq('id', targetDay.id);
+    await rollupEvent(event_id);
 
     return NextResponse.json({
       invoice_id: invoice.id,
@@ -242,14 +243,16 @@ export async function DELETE(req: NextRequest) {
   const user = await verifyAuth(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { event_id } = await req.json();
+  const { event_id, day_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
-  const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id, square_env').eq('id', event_id).single();
-  if (event?.square_invoice_id) {
-    const { client: squareClient } = squareFor((event.square_env as SquareEnv) || await getSquareMode());
+  // Resolve the day whose invoice we're unlinking (default the Main day)
+  const { data: days } = await supabaseAdmin.from('event_days').select('id, day_type, square_invoice_id, square_env').eq('event_id', event_id);
+  const day = day_id ? (days || []).find(d => String(d.id) === String(day_id)) : (days || []).find(d => d.square_invoice_id);
+  if (day?.square_invoice_id) {
+    const { client: squareClient } = squareFor((day.square_env as SquareEnv) || await getSquareMode());
     try {
-      const existing = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
+      const existing = await squareClient.invoices.get({ invoiceId: String(day.square_invoice_id) });
       const inv = existing.invoice;
       if (inv?.status === 'PAID' || inv?.status === 'PARTIALLY_PAID') {
         return NextResponse.json({ error: 'This invoice has been paid — cancel it in Square manually.' }, { status: 400 });
@@ -261,8 +264,9 @@ export async function DELETE(req: NextRequest) {
     } catch (e) {
       console.error('Unlink cleanup failed:', e);
     }
+    await supabaseAdmin.from('event_days').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null, square_env: null, invoice_sent_at: null }).eq('id', day.id);
   }
-  await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null, square_env: null }).eq('id', event_id);
+  await rollupEvent(event_id);
   return NextResponse.json({ ok: true });
 }
 

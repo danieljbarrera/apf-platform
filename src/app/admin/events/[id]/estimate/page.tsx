@@ -51,6 +51,7 @@ export default function EstimatePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [event, setEvent] = useState<Event | null>(null);
+  const [dayId, setDayId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [items, setItems] = useState<LineItem[]>([]);
@@ -58,8 +59,6 @@ export default function EstimatePage() {
   const [invoiceMsg, setInvoiceMsg] = useState('');
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncedInvoices, setSyncedInvoices] = useState<{ id: string; status: string; public_url: string; total: number | null; invoice_number?: string }[] | null>(null);
-  const [otherInvoiceCount, setOtherInvoiceCount] = useState(0);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
@@ -68,79 +67,101 @@ export default function EstimatePage() {
     return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...options?.headers } });
   }, []);
 
+  function sortedDays(data: Event): Event[] {
+    return (((data?.event_days as Event[]) || [])).slice().sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
+  }
+  function mainDayId(data: Event): string | null {
+    const ds = sortedDays(data);
+    const m = ds.filter(d => (d.day_type || 'Main') === 'Main')[0] || ds[0];
+    return m ? String(m.id) : null;
+  }
+  function loadDayState(data: Event, did: string | null) {
+    const day = sortedDays(data).find(d => String(d.id) === String(did));
+    const stored = (day?.estimate_line_items as LineItem[]) || null;
+    if (stored && stored.length) { setItems(stored); setDeposit(Number(day!.estimate_deposit) || round(sum(stored) * 0.25)); }
+    else { setItems([]); setDeposit(0); }
+  }
+
   async function loadEvent() {
     const r = await authFetch(`/api/admin/events/${id}`);
     const data = await r.json();
     setEvent(data);
+    const did = dayId || mainDayId(data);
+    if (!dayId) setDayId(did);
+    loadDayState(data, did);
     return data;
   }
 
   useEffect(() => {
     authFetch(`/api/admin/events/${id}`).then(r => r.json()).then(data => {
       setEvent(data);
-      const stored = (data.estimate_line_items as LineItem[]) || null;
-      if (stored && stored.length) {
-        setItems(stored);
-        setDeposit(Number(data.estimate_deposit) || round(sum(stored) * 0.25));
-      }
+      const did = mainDayId(data);
+      setDayId(did);
+      loadDayState(data, did);
       setLoading(false);
     });
   }, [id, authFetch]);
 
-  // Debounced autosave of the working draft. `nextTotal` is the final (post-discount) total.
+  function selectDay(did: string) {
+    setDayId(did);
+    if (event) loadDayState(event, did);
+  }
+
+  // Saves estimate line items onto the SELECTED DAY.
   const save = useCallback((nextItems: LineItem[], nextDeposit: number, nextTotal: number, extra?: Record<string, unknown>) => {
+    if (!dayId) return;
     setSaveState('saving');
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await authFetch(`/api/admin/events/${id}`, {
+      await authFetch(`/api/admin/event-days/${dayId}`, {
         method: 'PATCH',
         body: JSON.stringify({ estimate_line_items: nextItems, estimate_total: nextTotal, estimate_deposit: nextDeposit, ...extra }),
       });
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 1500);
     }, 600);
-  }, [id, authFetch]);
+  }, [dayId, authFetch]);
 
+  // Patches a config field on the SELECTED DAY (optimistic).
   const patchConfig = useCallback((updates: Record<string, unknown>) => {
-    setEvent(prev => prev ? { ...prev, ...updates } : prev);
+    setEvent(prev => prev ? { ...prev, event_days: ((prev.event_days as Event[]) || []).map(d => String(d.id) === String(dayId) ? { ...d, ...updates } : d) } : prev);
     setSaveState('saving');
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await authFetch(`/api/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify(updates) });
+      await authFetch(`/api/admin/event-days/${dayId}`, { method: 'PATCH', body: JSON.stringify(updates) });
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 1500);
     }, 600);
-  }, [id, authFetch]);
+  }, [dayId, authFetch]);
 
   if (loading || !event) return <div style={{ color: 'var(--ink-3)', fontSize: 14, padding: '2rem' }}>Loading…</div>;
 
-  const days = ((event.event_days as Event[]) || []).sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
-  const mainDays = days.filter(d => (d.day_type || 'Main') === 'Main');
-  const dayGuests = mainDays.reduce((s, d) => s + (Number(d.guests) || 0), 0);
-  const firstStyle = mainDays[0]?.service_style ? String(mainDays[0].service_style) : 'Buffet';
+  const days = sortedDays(event);
+  const day = (days.find(d => String(d.id) === String(dayId)) || days[0] || {}) as Event;
 
-  const guests = Number(event.estimate_guests) || dayGuests || 0;
+  const dGuests = Number(day.guests) || 0;
+  const guests = Number(day.estimate_guests) || dGuests || 0;
   const cfg: Cfg = {
     guests,
-    style: event.estimate_style ? String(event.estimate_style) : firstStyle,
-    hours: Number(event.event_hours) || 5,
-    appetizers: Number(event.appetizer_count) || 0,
-    dessert: event.include_dessert === true,
-    coffee: event.include_coffee === true,
-    coffeeGuests: Number(event.coffee_guests) || guests,
-    bar: event.bar_package ? String(event.bar_package) : 'None',
-    barPrice: event.bar_price_per_guest != null ? Number(event.bar_price_per_guest) : (BAR_TYPES[event.bar_package ? String(event.bar_package) : 'None']?.perGuest ?? 0),
-    paymentMethod: event.payment_method ? String(event.payment_method) : 'card',
-    foodPrice: event.food_price_per_guest != null ? Number(event.food_price_per_guest) : 65,
-    serviceFeeRate: event.service_fee_rate != null ? Number(event.service_fee_rate) : 10,
-    includeCaptain: event.include_captain !== false,
-    setupBreakdown: event.setup_breakdown_hours != null ? Number(event.setup_breakdown_hours) : 4,
-    ratio: event.staff_ratio_override != null ? Number(event.staff_ratio_override) : null,
-    applyMinimum: event.apply_event_minimum === true,
+    style: day.estimate_style ? String(day.estimate_style) : (day.service_style ? String(day.service_style) : 'Buffet'),
+    hours: Number(day.event_hours) || 5,
+    appetizers: Number(day.appetizer_count) || 0,
+    dessert: day.include_dessert === true,
+    coffee: day.include_coffee === true,
+    coffeeGuests: Number(day.coffee_guests) || guests,
+    bar: day.bar_package ? String(day.bar_package) : 'None',
+    barPrice: day.bar_price_per_guest != null ? Number(day.bar_price_per_guest) : (BAR_TYPES[day.bar_package ? String(day.bar_package) : 'None']?.perGuest ?? 0),
+    paymentMethod: day.payment_method ? String(day.payment_method) : 'card',
+    foodPrice: day.food_price_per_guest != null ? Number(day.food_price_per_guest) : 65,
+    serviceFeeRate: day.service_fee_rate != null ? Number(day.service_fee_rate) : 10,
+    includeCaptain: day.include_captain !== false,
+    setupBreakdown: day.setup_breakdown_hours != null ? Number(day.setup_breakdown_hours) : 4,
+    ratio: day.staff_ratio_override != null ? Number(day.staff_ratio_override) : null,
+    applyMinimum: day.apply_event_minimum === true,
   };
-  const locked = !!event.estimate_approved_at;
-  const discount = Number(event.estimate_discount) || 0;
-  const discountLabel = event.estimate_discount_label ? String(event.estimate_discount_label) : 'Discount';
+  const locked = !!day.estimate_approved_at;
+  const discount = Number(day.estimate_discount) || 0;
+  const discountLabel = day.estimate_discount_label ? String(day.estimate_discount_label) : 'Discount';
 
   const total = round(sum(items) - discount);
   const defaultDeposit = round(total * 0.25);
@@ -180,20 +201,20 @@ export default function EstimatePage() {
   }
 
   async function approve() {
-    await authFetch(`/api/admin/events/${id}`, {
+    await authFetch(`/api/admin/event-days/${dayId}`, {
       method: 'PATCH',
       body: JSON.stringify({ estimate_line_items: items, estimate_total: total, estimate_deposit: deposit, estimate_guests: guests, estimate_style: cfg.style, estimate_approved_at: new Date().toISOString() }),
     });
     loadEvent();
   }
   async function unlock() {
-    await authFetch(`/api/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify({ estimate_approved_at: null }) });
+    await authFetch(`/api/admin/event-days/${dayId}`, { method: 'PATCH', body: JSON.stringify({ estimate_approved_at: null }) });
     loadEvent();
   }
 
   async function createInvoice() {
     setInvoiceLoading(true); setInvoiceMsg('');
-    const res = await authFetch('/api/admin/square/invoice', { method: 'POST', body: JSON.stringify({ event_id: id }) });
+    const res = await authFetch('/api/admin/square/invoice', { method: 'POST', body: JSON.stringify({ event_id: id, day_id: dayId }) });
     const data = await res.json();
     setInvoiceLoading(false);
     if (!res.ok) { setInvoiceMsg(data.error || 'Failed'); return; }
@@ -203,7 +224,7 @@ export default function EstimatePage() {
   async function sendInvoice() {
     if (!confirm(`Send this invoice to ${event?.client_email ? String(event.client_email) : 'the client'}? Square will email it to them.`)) return;
     setInvoiceLoading(true); setInvoiceMsg('');
-    const res = await authFetch('/api/admin/square/invoice/send', { method: 'POST', body: JSON.stringify({ event_id: id }) });
+    const res = await authFetch('/api/admin/square/invoice/send', { method: 'POST', body: JSON.stringify({ event_id: id, day_id: dayId }) });
     const data = await res.json();
     setInvoiceLoading(false);
     if (!res.ok) { setInvoiceMsg(data.error || 'Failed to send'); return; }
@@ -211,18 +232,17 @@ export default function EstimatePage() {
     loadEvent();
   }
   async function unlinkInvoice() {
-    if (!confirm('Cancel this invoice in Square and unlink it from the event? (Paid invoices cannot be canceled here.)')) return;
-    const res = await authFetch('/api/admin/square/invoice', { method: 'DELETE', body: JSON.stringify({ event_id: id }) });
+    if (!confirm('Cancel this invoice in Square and unlink it from this day? (Paid invoices cannot be canceled here.)')) return;
+    const res = await authFetch('/api/admin/square/invoice', { method: 'DELETE', body: JSON.stringify({ event_id: id, day_id: dayId }) });
     const data = await res.json();
     if (!res.ok) { setInvoiceMsg(data.error || 'Failed to unlink'); return; }
     setInvoiceMsg('Invoice canceled in Square and unlinked'); loadEvent();
   }
   async function syncSquare() {
     setSyncing(true);
-    const res = await authFetch('/api/admin/square/sync', { method: 'POST', body: JSON.stringify({ event_id: id }) });
-    const data = await res.json();
+    await authFetch('/api/admin/square/sync', { method: 'POST', body: JSON.stringify({ event_id: id }) });
     setSyncing(false);
-    if (res.ok) { setSyncedInvoices(data.invoices || []); setOtherInvoiceCount(data.client_other_invoice_count || 0); loadEvent(); }
+    loadEvent();
   }
 
   const selectStyle: React.CSSProperties = { fontSize: 13, padding: '6px 10px' };
@@ -238,7 +258,25 @@ export default function EstimatePage() {
         <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.7rem', fontWeight: 500 }}>Estimate</h1>
         <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)' }}>{saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : ''}</span>
       </div>
-      <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: '1.5rem' }}>{String(event.client_names)}{event.quote_number ? ` · ${String(event.quote_number)}` : ''}</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: days.length > 1 ? '0.75rem' : '1.5rem' }}>{String(event.client_names)}{event.quote_number ? ` · ${String(event.quote_number)}` : ''}</div>
+
+      {/* Day selector — each day has its own estimate + invoice */}
+      {days.length > 1 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          {days.map(d => {
+            const isSel = String(d.id) === String(dayId);
+            const label = (d.day_type && d.day_type !== 'Main') ? String(d.day_type) : 'Main Event';
+            const paid = !!d.deposit_paid_at;
+            return (
+              <button key={String(d.id)} onClick={() => selectDay(String(d.id))}
+                style={{ border: '1.5px solid', borderColor: isSel ? 'var(--brass)' : 'var(--rule)', background: isSel ? 'var(--brass)' : 'transparent', color: isSel ? '#fff' : 'var(--ink-3)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: 500, textAlign: 'left' }}>
+                <div style={{ fontWeight: 600 }}>{label} {d.estimate_approved_at ? '✓' : ''}</div>
+                <div style={{ fontSize: 10, opacity: 0.8 }}>{d.event_date ? new Date(String(d.event_date) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}{d.estimate_total ? ` · ${fmtD(Number(d.estimate_total))}` : ''}{paid ? ' · paid' : ''}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Configuration */}
       <div className="card" style={{ padding: '1.2rem 1.4rem', marginBottom: '1.25rem', opacity: locked ? 0.55 : 1, pointerEvents: locked ? 'none' : 'auto' }}>
@@ -366,17 +404,17 @@ export default function EstimatePage() {
         </div>
       )}
 
-      {/* Square */}
+      {/* Square (per selected day) */}
       {locked && (
         <div className="card" style={{ padding: '1.2rem 1.4rem', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 12 }}>Square Invoice</div>
-          {(!!event.deposit_paid_at || !!event.balance_paid_at) && (
+          {(!!day.deposit_paid_at || !!day.balance_paid_at) && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-              {!!event.deposit_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Deposit paid</span>}
-              {!!event.balance_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Balance paid</span>}
+              {!!day.deposit_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Deposit paid</span>}
+              {!!day.balance_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Balance paid</span>}
             </div>
           )}
-          {!event.square_invoice_id ? (
+          {!day.square_invoice_id ? (
             (!event.client_email && !event.client_phone) ? (
               <div style={{ background: '#fff8ed', border: '1px solid #d97706', borderRadius: 'var(--r-sm)', padding: '10px 14px', fontSize: 12, color: '#92400e' }}>
                 Add a <strong>client email or phone</strong> on the <button onClick={() => router.push(`/admin/events/${id}`)} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, padding: 0 }}>event page</button> before creating the invoice.
@@ -384,45 +422,34 @@ export default function EstimatePage() {
             ) : (
               <div>
                 <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Draft Invoice'}</button>
-                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Creates a <strong>draft</strong> in Square from the approved line items. Nothing is sent yet — you review it, then Send to Client.</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Creates a <strong>draft</strong> in Square from this day&apos;s approved line items. Nothing is sent yet — you review it, then Send to Client.</div>
               </div>
             )
-          ) : String(event.square_invoice_status) === 'DRAFT' && !event.invoice_sent_at ? (
+          ) : String(day.square_invoice_status) === 'DRAFT' && !day.invoice_sent_at ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#79715f', background: '#f4f4f4', border: '1px solid var(--rule)', borderRadius: 99, padding: '3px 11px' }}>DRAFT · NOT SENT</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <button onClick={sendInvoice} disabled={invoiceLoading} className="btn btn-brass" style={{ fontSize: 13, padding: '9px 20px', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Sending…' : 'Send to Client →'}</button>
-                <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 12, fontWeight: 500, textDecoration: 'none', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Review in Square ↗</a>
+                <a href={String(day.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 12, fontWeight: 500, textDecoration: 'none', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Review in Square ↗</a>
                 <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Discard</button>
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Send emails the invoice to {event.client_email ? <strong>{String(event.client_email)}</strong> : 'the client'} via Square.</div>
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              {!!event.invoice_sent_at && <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309', background: '#fff7ed', border: '1px solid #f0d8b8', borderRadius: 99, padding: '3px 11px' }}>SENT {new Date(String(event.invoice_sent_at)).toLocaleDateString()}</span>}
-              {!!event.square_invoice_url && <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>}
+              {!!day.invoice_sent_at && <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309', background: '#fff7ed', border: '1px solid #f0d8b8', borderRadius: 99, padding: '3px 11px' }}>SENT {new Date(String(day.invoice_sent_at)).toLocaleDateString()}</span>}
+              {!!day.square_invoice_url && <a href={String(day.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>}
               <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Unlink</button>
             </div>
           )}
           {invoiceMsg && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 10 }}>{invoiceMsg}</div>}
 
-          {!!event.square_customer_id && (
+          {!!day.square_invoice_id && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--paper-3)' }}>
               <button onClick={syncSquare} disabled={syncing} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: syncing ? 'wait' : 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>{syncing ? 'Syncing…' : '↻ Sync from Square'}</button>
-              {!!event.square_invoice_status && <span style={{ marginLeft: 10, fontSize: 11, color: 'var(--ink-4)' }}>Status: <strong style={{ color: 'var(--ink-2)' }}>{String(event.square_invoice_status)}</strong></span>}
-              {syncedInvoices && syncedInvoices.length > 0 && (
-                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {syncedInvoices.map(inv => (
-                    <a key={inv.id} href={inv.public_url} target="_blank" rel="noreferrer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--ink-2)', textDecoration: 'none', padding: '7px 10px', background: 'var(--paper-2)', borderRadius: 'var(--r-sm)' }}>
-                      <span>{inv.invoice_number ? `#${inv.invoice_number}` : 'Draft'} · {inv.status}</span>
-                      <span style={{ color: 'var(--brass)' }}>{inv.total != null ? fmtD(inv.total) : ''} ↗</span>
-                    </a>
-                  ))}
-                </div>
-              )}
-              {otherInvoiceCount > 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>This client has {otherInvoiceCount} other invoice{otherInvoiceCount > 1 ? 's' : ''} in Square from other events (not shown).</div>}
+              {!!day.square_invoice_status && <span style={{ marginLeft: 10, fontSize: 11, color: 'var(--ink-4)' }}>Status: <strong style={{ color: 'var(--ink-2)' }}>{String(day.square_invoice_status)}</strong></span>}
             </div>
           )}
         </div>
