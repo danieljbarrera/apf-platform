@@ -71,6 +71,10 @@ export async function POST(req: NextRequest) {
   const givenName = nameParts[0] || clientNames;
   const familyName = nameParts.slice(1).join(' ') || '';
 
+  // Tie order/invoice idempotency to the approval moment, so re-approving after an
+  // edit produces a NEW invoice rather than returning the previously created one.
+  const stamp = String(event.estimate_approved_at || Date.now()).replace(/\D/g, '').slice(0, 16);
+
   try {
     // 1. Resolve the Square customer.
     //    A repeat client is ONE Square customer across many events — reuse by email
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Create order
     const orderResp = await squareClient.orders.create({
-      idempotencyKey: `apf-order-${event_id}`,
+      idempotencyKey: `apf-order-${event_id}-${stamp}`,
       order: {
         locationId: squareLocationId,
         lineItems,
@@ -120,7 +124,7 @@ export async function POST(req: NextRequest) {
 
     // 4. Create invoice
     const invoiceResp = await squareClient.invoices.create({
-      idempotencyKey: `apf-invoice-${event_id}`,
+      idempotencyKey: `apf-invoice-${event_id}-${stamp}`,
       invoice: {
         locationId: squareLocationId,
         orderId,
@@ -159,7 +163,7 @@ export async function POST(req: NextRequest) {
     const pubResp = await squareClient.invoices.publish({
       invoiceId: invoice.id,
       version: invoice.version ?? 0,
-      idempotencyKey: `apf-publish-${event_id}-${invoice.version ?? 0}`,
+      idempotencyKey: `apf-publish-${event_id}-${stamp}-${invoice.version ?? 0}`,
     });
     const published = pubResp.invoice;
     const invoiceUrl = published?.publicUrl ?? null;
