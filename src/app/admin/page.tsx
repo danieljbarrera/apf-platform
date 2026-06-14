@@ -147,7 +147,11 @@ function DepositPaid({ event }: { event: Event }) {
   const total = Number(event.estimate_total) || 0;
   const paid = Number(event.amount_paid) || 0;
   if (total > 0 && paid >= total - 0.01) return <PayPill label="PAID" title="Paid in full" tone="green" />;
-  if (paid > 0 || event.deposit_paid_at) return <PayPill label="$ ✓" title="Partially paid" tone="green" />;
+  if (paid > 0 && total > 0) {
+    const pct = Math.round((paid / total) * 100);
+    return <PayPill label={`${pct}%`} title={`${pct}% paid · $${Math.round(paid).toLocaleString()} of $${Math.round(total).toLocaleString()}`} tone="brass" />;
+  }
+  if (paid > 0 || event.deposit_paid_at) return <PayPill label="$ ✓" title="Partially paid" tone="brass" />;
   const st = event.square_invoice_status ? String(event.square_invoice_status) : null;
   if (st === 'UNPAID' || st === 'SCHEDULED') return <PayPill label="SENT" title="Invoice sent · awaiting payment" tone="amber" />;
   if (st === 'DRAFT') return <PayPill label="DRAFT" title="Invoice draft · not sent" tone="gray" />;
@@ -155,8 +159,9 @@ function DepositPaid({ event }: { event: Event }) {
   return null;
 }
 
-function PayPill({ label, title, tone }: { label: string; title: string; tone: 'green' | 'amber' | 'gray' }) {
+function PayPill({ label, title, tone }: { label: string; title: string; tone: 'green' | 'brass' | 'amber' | 'gray' }) {
   const c = tone === 'green' ? { color: 'var(--green)', bg: 'var(--green-lt)', bd: '#c4dccd' }
+    : tone === 'brass' ? { color: 'var(--brass)', bg: 'var(--paper-2)', bd: 'var(--brass-lt)' }
     : tone === 'amber' ? { color: '#b45309', bg: '#fff7ed', bd: '#f0d8b8' }
     : { color: '#79715f', bg: '#f4f4f4', bd: 'var(--rule)' };
   return (
