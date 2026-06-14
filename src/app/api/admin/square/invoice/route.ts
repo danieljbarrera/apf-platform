@@ -72,8 +72,17 @@ export async function POST(req: NextRequest) {
   const familyName = nameParts.slice(1).join(' ') || '';
 
   try {
-    // 1. Create or reuse customer
+    // 1. Resolve the Square customer.
+    //    A repeat client is ONE Square customer across many events — reuse by email
+    //    rather than creating a duplicate each time.
     let customerId = event.square_customer_id as string | undefined;
+    if (!customerId && event.client_email) {
+      const found = await squareClient.customers.search({
+        query: { filter: { emailAddress: { exact: String(event.client_email) } } },
+        limit: BigInt(1),
+      });
+      customerId = found.customers?.[0]?.id;
+    }
     if (!customerId) {
       const custResp = await squareClient.customers.create({
         idempotencyKey: `apf-customer-${event_id}`,
@@ -81,12 +90,13 @@ export async function POST(req: NextRequest) {
         familyName,
         emailAddress: event.client_email ? String(event.client_email) : undefined,
         phoneNumber: event.client_phone ? String(event.client_phone) : undefined,
-        referenceId: String(event_id),
+        // NOTE: referenceId is intentionally NOT the event_id here — a customer
+        // can span multiple events. Events are tied to invoices, not customers.
       });
       customerId = custResp.customer?.id;
-      if (customerId) {
-        await supabaseAdmin.from('events').update({ square_customer_id: customerId }).eq('id', event_id);
-      }
+    }
+    if (customerId && customerId !== event.square_customer_id) {
+      await supabaseAdmin.from('events').update({ square_customer_id: customerId }).eq('id', event_id);
     }
 
     // 2. Build line items from the APPROVED estimate (exact numbers she signed off on)

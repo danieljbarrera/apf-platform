@@ -40,6 +40,7 @@ export default function EstimatePage() {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncedInvoices, setSyncedInvoices] = useState<{ id: string; status: string; public_url: string; total: number | null; invoice_number?: string }[] | null>(null);
+  const [otherInvoiceCount, setOtherInvoiceCount] = useState(0);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
@@ -125,7 +126,7 @@ export default function EstimatePage() {
     const res = await authFetch('/api/admin/square/sync', { method: 'POST', body: JSON.stringify({ event_id: id }) });
     const data = await res.json();
     setSyncing(false);
-    if (res.ok) { setSyncedInvoices(data.invoices || []); loadEvent(); }
+    if (res.ok) { setSyncedInvoices(data.invoices || []); setOtherInvoiceCount(data.client_other_invoice_count || 0); loadEvent(); }
   }
 
   const selectStyle: React.CSSProperties = { fontSize: 13, padding: '6px 10px' };
@@ -274,7 +275,8 @@ export default function EstimatePage() {
                   ))}
                 </div>
               )}
-              {syncedInvoices && syncedInvoices.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>No invoices found in Square yet for this customer.</div>}
+              {syncedInvoices && syncedInvoices.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>No invoice linked to this event yet. Create the draft above to link one.</div>}
+              {otherInvoiceCount > 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>This client has {otherInvoiceCount} other invoice{otherInvoiceCount > 1 ? 's' : ''} in Square from other events (not shown — only this event&apos;s invoice is tracked here).</div>}
             </div>
           )}
         </div>

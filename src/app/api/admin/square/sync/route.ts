@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     const cents = (m: { amount?: bigint | null } | undefined) => m?.amount ? Number(m.amount) / 100 : 0;
 
-    const invoices = (resp.invoices ?? []).map(inv => {
+    const all = (resp.invoices ?? []).map(inv => {
       const dep = inv.paymentRequests?.find(r => r.requestType === 'DEPOSIT');
       const bal = inv.paymentRequests?.find(r => r.requestType === 'BALANCE');
       return {
@@ -50,14 +50,16 @@ export async function POST(req: NextRequest) {
         total: inv.paymentRequests?.reduce((s, r) => s + cents(r.computedAmountMoney), 0) ?? null,
         deposit_paid: dep ? cents(dep.totalCompletedAmountMoney) : 0,
         balance_paid: bal ? cents(bal.totalCompletedAmountMoney) : 0,
+        is_this_event: inv.id === event.square_invoice_id,
       };
     });
 
-    // Refresh the event's primary invoice from the matching record
-    const primary = invoices.find(i => i.id === event.square_invoice_id) || invoices[0];
+    // CRITICAL for repeat clients: only reconcile THIS event's own invoice.
+    // A repeat client shares one Square customer across many events/invoices —
+    // we must never stamp this event paid from a different event's invoice.
+    const primary = all.find(i => i.is_this_event);
     if (primary) {
       const updates: Record<string, unknown> = {
-        square_invoice_id: primary.id,
         square_invoice_url: primary.public_url,
         square_invoice_status: primary.status,
       };
@@ -66,7 +68,12 @@ export async function POST(req: NextRequest) {
       await supabaseAdmin.from('events').update(updates).eq('id', event_id);
     }
 
-    return NextResponse.json({ invoices });
+    // Return only this event's invoice (plus a count of the client's others for context)
+    const thisEvent = all.filter(i => i.is_this_event);
+    return NextResponse.json({
+      invoices: thisEvent,
+      client_other_invoice_count: all.length - thisEvent.length,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('Square sync error:', e);
