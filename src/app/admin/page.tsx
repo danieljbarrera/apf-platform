@@ -729,8 +729,8 @@ export default function AdminDashboard() {
       )}
 
       {/* Search + tabs */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 340 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'nowrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 0, maxWidth: 340 }}>
           <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-4)', pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
           </svg>
@@ -743,7 +743,7 @@ export default function AdminDashboard() {
           />
         </div>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setCompact(c => !c)} title="Tighten rows / cards and hide secondary details" style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
+        <button onClick={() => setCompact(c => !c)} title="Tighten rows / cards and hide secondary details" style={{ flexShrink: 0, background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
           {compact ? 'Compact ✓' : 'Compact'}
         </button>
       </div>
