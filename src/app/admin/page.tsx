@@ -224,7 +224,7 @@ function ConvertModal({ lead, onClose, onConverted, authFetch }: {
     const res = await authFetch('/api/admin/events', {
       method: 'POST',
       body: JSON.stringify({
-        event: { client_names: clientNames, status: 'New', client_email: lead.email || null, client_phone: lead.phone || null },
+        event: { client_names: clientNames, status: 'New', client_email: lead.email || null, client_phone: lead.phone || null, quote_id: lead.id },
         days: [{ event_date: lead.event_date, venue: venue.trim(), guests: lead.guests, service_style: lead.preferred_style, sort_order: 0 }],
       }),
     });
