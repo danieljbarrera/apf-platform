@@ -142,8 +142,8 @@ function DepositPaid({ event }: { event: Event }) {
   if (event.balance_paid_at) return <PayPill label="PAID" title="Paid in full" tone="green" />;
   if (event.deposit_paid_at) return <PayPill label="$ ✓" title="Deposit paid" tone="green" />;
   const st = event.square_invoice_status ? String(event.square_invoice_status) : null;
-  if (st === 'UNPAID' || st === 'SCHEDULED') return <PayPill label="INVOICED" title="Invoice sent · awaiting payment" tone="amber" />;
-  if (st === 'DRAFT') return <PayPill label="DRAFT" title="Invoice draft (not sent)" tone="gray" />;
+  if (st === 'UNPAID' || st === 'SCHEDULED') return <PayPill label="SENT" title="Invoice sent · awaiting payment" tone="amber" />;
+  if (st === 'DRAFT') return <PayPill label="DRAFT" title="Invoice draft · not sent" tone="gray" />;
   if (st === 'CANCELED') return <PayPill label="CANCELED" title="Invoice canceled" tone="gray" />;
   return null;
 }

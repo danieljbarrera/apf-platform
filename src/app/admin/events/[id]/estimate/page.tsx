@@ -197,7 +197,17 @@ export default function EstimatePage() {
     const data = await res.json();
     setInvoiceLoading(false);
     if (!res.ok) { setInvoiceMsg(data.error || 'Failed'); return; }
-    setInvoiceMsg(data.already_exists ? 'Draft already exists in Square' : 'Draft invoice created in Square — review & send there');
+    setInvoiceMsg('Draft invoice created in Square — review it, then Send to Client');
+    loadEvent();
+  }
+  async function sendInvoice() {
+    if (!confirm(`Send this invoice to ${event?.client_email ? String(event.client_email) : 'the client'}? Square will email it to them.`)) return;
+    setInvoiceLoading(true); setInvoiceMsg('');
+    const res = await authFetch('/api/admin/square/invoice/send', { method: 'POST', body: JSON.stringify({ event_id: id }) });
+    const data = await res.json();
+    setInvoiceLoading(false);
+    if (!res.ok) { setInvoiceMsg(data.error || 'Failed to send'); return; }
+    setInvoiceMsg('Invoice sent to client ✓');
     loadEvent();
   }
   async function unlinkInvoice() {
@@ -366,20 +376,34 @@ export default function EstimatePage() {
               {!!event.balance_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Balance paid</span>}
             </div>
           )}
-          {event.square_invoice_url ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>
-              <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>Review the draft in Square, then send it from there.</span>
-              <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Unlink</button>
-            </div>
-          ) : !event.client_email && !event.client_phone ? (
-            <div style={{ background: '#fff8ed', border: '1px solid #d97706', borderRadius: 'var(--r-sm)', padding: '10px 14px', fontSize: 12, color: '#92400e' }}>
-              Add a <strong>client email or phone</strong> on the <button onClick={() => router.push(`/admin/events/${id}`)} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, padding: 0 }}>event page</button> before creating the invoice — Square needs it to send.
+          {!event.square_invoice_id ? (
+            (!event.client_email && !event.client_phone) ? (
+              <div style={{ background: '#fff8ed', border: '1px solid #d97706', borderRadius: 'var(--r-sm)', padding: '10px 14px', fontSize: 12, color: '#92400e' }}>
+                Add a <strong>client email or phone</strong> on the <button onClick={() => router.push(`/admin/events/${id}`)} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, padding: 0 }}>event page</button> before creating the invoice.
+              </div>
+            ) : (
+              <div>
+                <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Draft Invoice'}</button>
+                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Creates a <strong>draft</strong> in Square from the approved line items. Nothing is sent yet — you review it, then Send to Client.</div>
+              </div>
+            )
+          ) : String(event.square_invoice_status) === 'DRAFT' && !event.invoice_sent_at ? (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#79715f', background: '#f4f4f4', border: '1px solid var(--rule)', borderRadius: 99, padding: '3px 11px' }}>DRAFT · NOT SENT</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button onClick={sendInvoice} disabled={invoiceLoading} className="btn btn-brass" style={{ fontSize: 13, padding: '9px 20px', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Sending…' : 'Send to Client →'}</button>
+                <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 12, fontWeight: 500, textDecoration: 'none', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Review in Square ↗</a>
+                <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Discard</button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Send emails the invoice to {event.client_email ? <strong>{String(event.client_email)}</strong> : 'the client'} via Square.</div>
             </div>
           ) : (
-            <div>
-              <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Invoice in Square'}</button>
-              <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Builds the invoice from the approved line items in Square. It is <strong>not</strong> emailed to the client automatically — open it, review, and send it from Square when ready.</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {!!event.invoice_sent_at && <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309', background: '#fff7ed', border: '1px solid #f0d8b8', borderRadius: 99, padding: '3px 11px' }}>SENT {new Date(String(event.invoice_sent_at)).toLocaleDateString()}</span>}
+              {!!event.square_invoice_url && <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>}
+              <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Unlink</button>
             </div>
           )}
           {invoiceMsg && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 10 }}>{invoiceMsg}</div>}
