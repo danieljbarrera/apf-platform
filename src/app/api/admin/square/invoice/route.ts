@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { squareFor, currentSquareMode, dashHostFor, type SquareEnv } from '@/lib/square';
+import { squareFor, dashHostFor, type SquareEnv } from '@/lib/square';
+import { getSquareMode } from '@/lib/settings';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (evErr || !event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
 
   // New invoices use the current mode; cleanup of an existing one uses ITS env.
-  const mode = currentSquareMode();
+  const mode = await getSquareMode();
   const { client: squareClient, locationId: squareLocationId } = squareFor(mode);
 
   // If an invoice is already linked, clean it up before making a new one so we
@@ -246,7 +247,7 @@ export async function DELETE(req: NextRequest) {
 
   const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id, square_env').eq('id', event_id).single();
   if (event?.square_invoice_id) {
-    const { client: squareClient } = squareFor((event.square_env as SquareEnv) || currentSquareMode());
+    const { client: squareClient } = squareFor((event.square_env as SquareEnv) || await getSquareMode());
     try {
       const existing = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
       const inv = existing.invoice;
@@ -273,7 +274,7 @@ export async function GET(req: NextRequest) {
   if (!invoiceId) return NextResponse.json({ error: 'invoice_id required' }, { status: 400 });
 
   try {
-    const { client: squareClient } = squareFor(currentSquareMode());
+    const { client: squareClient } = squareFor(await getSquareMode());
     const resp = await squareClient.invoices.get({ invoiceId });
     const inv = resp.invoice;
     return NextResponse.json({

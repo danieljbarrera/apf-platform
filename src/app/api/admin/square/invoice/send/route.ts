@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { squareFor, currentSquareMode, type SquareEnv } from '@/lib/square';
+import { squareFor, type SquareEnv } from '@/lib/square';
+import { getSquareMode } from '@/lib/settings';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'This invoice has already been sent.' }, { status: 400 });
   }
 
-  const { client: squareClient } = squareFor((event.square_env as SquareEnv) || currentSquareMode());
+  const { client: squareClient } = squareFor((event.square_env as SquareEnv) || await getSquareMode());
 
   try {
     const cur = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });

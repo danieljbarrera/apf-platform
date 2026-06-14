@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { squareFor, currentSquareMode, dashHostFor, type SquareEnv } from '@/lib/square';
+import { squareFor, dashHostFor, type SquareEnv } from '@/lib/square';
+import { getSquareMode } from '@/lib/settings';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ invoices: [], message: 'No Square customer linked yet' });
   }
 
-  const env = (event.square_env as SquareEnv) || currentSquareMode();
+  const env = (event.square_env as SquareEnv) || await getSquareMode();
   const { client: squareClient, locationId: squareLocationId } = squareFor(env);
   const dashHost = dashHostFor(env);
 

@@ -84,6 +84,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div style={{ flex: 1 }} />
 
+          <SquareModeBadge />
+
           {/* Desktop sign out */}
           <button className="nav-signout-desktop"
             onClick={handleLogout}
@@ -123,6 +125,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </main>
       </div>
     </ToastProvider>
+  );
+}
+
+function SquareModeBadge() {
+  const [mode, setMode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function authFetch(url: string, opts?: RequestInit) {
+    const supabase = getSupabaseBrowser();
+    const { data: { session } } = await supabase.auth.getSession();
+    return fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...opts?.headers } });
+  }
+
+  useEffect(() => {
+    authFetch('/api/admin/square/mode').then(r => r.json()).then(d => setMode(d.mode)).catch(() => {});
+  }, []);
+
+  async function toggle() {
+    const next = mode === 'production' ? 'sandbox' : 'production';
+    if (next === 'production' && !confirm('Switch to PRODUCTION (live) Square?\n\nNew invoices you create and send will be REAL and charge real clients.')) return;
+    setBusy(true);
+    const res = await authFetch('/api/admin/square/mode', { method: 'POST', body: JSON.stringify({ mode: next }) });
+    const d = await res.json();
+    setBusy(false);
+    if (res.ok) setMode(d.mode); else alert(d.error || 'Failed to switch');
+  }
+
+  if (!mode) return null;
+  const live = mode === 'production';
+  return (
+    <button onClick={toggle} disabled={busy} title="Click to switch Square environment (new invoices)"
+      style={{ background: live ? 'rgba(220,38,38,0.18)' : 'rgba(255,255,255,0.08)', border: `1px solid ${live ? 'rgba(248,113,113,0.55)' : 'rgba(255,255,255,0.2)'}`, color: live ? '#fca5a5' : 'rgba(255,255,255,0.65)', borderRadius: 99, padding: '4px 11px', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--sans)', whiteSpace: 'nowrap', marginRight: 4 }}>
+      {busy ? '…' : (live ? '● LIVE' : '○ SANDBOX')}
+    </button>
   );
 }
 
