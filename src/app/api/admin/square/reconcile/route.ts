@@ -59,34 +59,39 @@ export async function POST(req: NextRequest) {
       const best = scored[0];
       const inv = best.inv;
 
-      // Pull exact line items from the order behind the invoice
+      // Pull the exact, FULL breakdown from the order: products + service charges
+      // (service/processing fees) + taxes, so the lines sum to the real total.
       let lineItems: { name: string; quantity: string; amount: number }[] = [];
+      let orderTotal = 0, orderDiscount = 0;
       if (inv.orderId) {
         const ordResp = await client.orders.get({ orderId: inv.orderId });
         const order = ordResp.order;
-        lineItems = (order?.lineItems || []).map(li => ({
-          name: li.name || 'Item',
-          quantity: '1',
-          amount: cents(li.totalMoney) || cents(li.basePriceMoney),
-        }));
-        // Order-level discounts → a single discount line for display
-        const disc = (order?.discounts || []).reduce((s, d) => s + cents(d.amountMoney), 0);
-        if (disc > 0) lineItems.push({ name: 'Discount', quantity: '1', amount: -disc });
+        orderTotal = cents(order?.totalMoney);
+        orderDiscount = cents(order?.totalDiscountMoney);
+        const products = (order?.lineItems || []).map(li => ({ name: li.name || 'Item', quantity: '1', amount: cents(li.totalMoney) }));
+        const charges = (order?.serviceCharges || []).map(sc => ({ name: sc.name || 'Service Charge', quantity: '1', amount: cents(sc.totalMoney) || cents(sc.appliedMoney) }));
+        const taxes = (order?.taxes || []).map(tx => ({ name: tx.name || 'Tax', quantity: '1', amount: cents(tx.appliedMoney) }));
+        lineItems = [...products, ...charges, ...taxes].filter(li => li.amount > 0);
       }
 
       const dep = (inv.paymentRequests || []).find(r => r.requestType === 'DEPOSIT');
       const bal = (inv.paymentRequests || []).find(r => r.requestType === 'BALANCE');
       const depositPaid = dep ? cents(dep.totalCompletedAmountMoney) : 0;
       const balancePaid = bal ? cents(bal.totalCompletedAmountMoney) : 0;
+      const depositAmt = dep ? cents(dep.computedAmountMoney) : 0;
+      const lineSum = Math.round(lineItems.reduce((s, li) => s + li.amount, 0) * 100) / 100;
+      const finalTotal = orderTotal || best.tot;
 
       const plan = {
         event: ev.client_names,
         matched_invoice: inv.invoiceNumber || inv.id,
         invoice_total: best.tot,
-        estimate_total: target,
-        diff: best.diff,
+        order_total: orderTotal,
+        line_sum: lineSum,            // should equal order_total
+        discount: orderDiscount,
         line_items: lineItems.length,
         status: inv.status,
+        deposit: depositAmt,
         deposit_paid: depositPaid,
         balance_paid: balancePaid,
       };
@@ -100,12 +105,14 @@ export async function POST(req: NextRequest) {
           square_env: 'production',
           invoice_sent_at: inv.status !== 'DRAFT' ? new Date().toISOString() : null,
           retainer_invoice_sent: inv.status !== 'DRAFT',
+          deposit_paid_at: depositPaid > 0 ? new Date().toISOString() : null,
+          balance_paid_at: balancePaid > 0 ? new Date().toISOString() : null,
         };
         if (lineItems.length) {
-          const lineTotal = lineItems.reduce((s, li) => s + li.amount, 0);
-          update.estimate_line_items = lineItems.filter(li => li.amount > 0);
-          update.estimate_total = lineTotal;
-          update.estimate_deposit = Math.round(lineTotal * 0.25 * 100) / 100;
+          update.estimate_line_items = lineItems;
+          update.estimate_total = finalTotal;
+          update.estimate_deposit = depositAmt || Math.round(finalTotal * 0.25 * 100) / 100;
+          update.estimate_discount = orderDiscount || null;
           update.estimate_approved_at = new Date().toISOString();
         }
         await supabaseAdmin.from('events').update(update).eq('id', ev.id);
