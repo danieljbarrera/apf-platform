@@ -136,6 +136,16 @@ function ProgressBar({ event }: { event: Event }) {
   );
 }
 
+function DepositPaid({ event }: { event: Event }) {
+  if (!event.deposit_paid_at) return null;
+  const balance = !!event.balance_paid_at;
+  return (
+    <span title={balance ? 'Paid in full' : 'Deposit paid'} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+      {balance ? 'PAID' : '$ ✓'}
+    </span>
+  );
+}
+
 function TrashBtn({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   return (
     <button onClick={onClick} title="Move to trash" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: 'var(--ink-4)', borderRadius: 'var(--r-sm)', lineHeight: 1 }}
@@ -752,7 +762,10 @@ export default function AdminDashboard() {
                       style={{ padding: '12px 14px', cursor: 'pointer', animation: 'rowIn 0.15s ease', ...accent }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
                         <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</div>
-                        <StatusBadge status={String(event.status)} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <DepositPaid event={event} />
+                          <StatusBadge status={String(event.status)} />
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmt(dayDate)}</span>
@@ -822,7 +835,10 @@ export default function AdminDashboard() {
                             {STATUSES.map(s => <option key={s}>{s}</option>)}
                           </select>
                         ) : (
-                          <StatusBadge status={String(event.status)} onClick={e => { e.stopPropagation(); setEditingStatusId(String(event.id)); }} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <StatusBadge status={String(event.status)} onClick={e => { e.stopPropagation(); setEditingStatusId(String(event.id)); }} />
+                            <DepositPaid event={event} />
+                          </div>
                         )}
                       </td>
                       <td style={{ padding: compact ? '5px 10px' : '12px 16px' }}><ProgressBar event={event} /></td>
