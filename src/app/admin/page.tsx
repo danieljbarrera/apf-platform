@@ -947,11 +947,11 @@ export default function AdminDashboard() {
               ))}
             </div>
             <div style={{ flex: 1 }} />
-            <button onClick={() => setAddingEvent(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
-              + Add Event
-            </button>
-            <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
+            <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
               + Add Lead
+            </button>
+            <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
+              + Add Event
             </button>
           </div>
           {/* Mobile lead cards */}
