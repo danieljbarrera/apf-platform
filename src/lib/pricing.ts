@@ -82,32 +82,51 @@ export interface BarCalc {
   total: number;
 }
 
-export function calcStaffing(guests: number, eventHours: number, style: string): StaffingCalc {
+// Optional per-event overrides. Omitting any keeps the standard default, so the
+// public quote form (which passes none) is unaffected.
+export interface PackageOverrides {
+  foodPerGuest?: number;       // default $65
+  serviceFeeRate?: number;     // default 0.10 (also 0.05, 0.15 in practice)
+  includeCaptain?: boolean;    // default true
+  setupBreakdownHours?: number; // default 4 (also 3 in practice)
+  staffRatio?: number;         // default per-style; she overrides per event
+  applyMinimum?: boolean;      // default true (form); admin estimate passes false
+}
+
+export function calcStaffing(
+  guests: number, eventHours: number, style: string, ov: PackageOverrides = {}
+): StaffingCalc {
   const s = PRICING.staffing;
-  const ratio = s.guestsPerWaitstaff[style];
+  const ratio = ov.staffRatio ?? s.guestsPerWaitstaff[style];
   const waitstaff = Math.max(1, Math.floor(guests / ratio));
-  const totalHours = eventHours + s.setupBreakdownHours;
-  const hourlyCost = waitstaff * s.waitstaffHourly + s.captainCount * s.captainHourly;
-  return { waitstaff, totalHours, captain: s.captainCount, cost: hourlyCost * totalHours, hourlyCost };
+  const setupBreak = ov.setupBreakdownHours ?? s.setupBreakdownHours;
+  const totalHours = eventHours + setupBreak;
+  const captain = ov.includeCaptain === false ? 0 : s.captainCount;
+  const hourlyCost = waitstaff * s.waitstaffHourly + captain * s.captainHourly;
+  return { waitstaff, totalHours, captain, cost: hourlyCost * totalHours, hourlyCost };
 }
 
 export function calcPackage(
   guests: number,
   eventHours: number,
   style: string,
-  opts: { appetizers: number; dessert: boolean; coffee: boolean }
+  opts: { appetizers: number; dessert: boolean; coffee: boolean } & PackageOverrides
 ): PackageCalc {
-  const food = PRICING.foodPerGuest * guests;
-  const staffing = calcStaffing(guests, eventHours, style);
+  const foodPerGuest = opts.foodPerGuest ?? PRICING.foodPerGuest;
+  const serviceFeeRate = opts.serviceFeeRate ?? PRICING.serviceFeeRate;
+  const applyMinimum = opts.applyMinimum ?? true;
+
+  const food = foodPerGuest * guests;
+  const staffing = calcStaffing(guests, eventHours, style, opts);
   const apps    = opts.appetizers * PRICING.addons.appetizerPerPersonEach * guests;
   const dessert = opts.dessert ? PRICING.addons.dessertPerGuest * guests : 0;
   const coffee  = opts.coffee  ? PRICING.addons.coffeeTeaPerGuest * guests : 0;
 
   const rawSubtotal = food + staffing.cost + apps + dessert + coffee;
-  const minimumApplied = rawSubtotal < PRICING.eventMinimum;
-  const subtotal = Math.max(rawSubtotal, PRICING.eventMinimum);
+  const minimumApplied = applyMinimum && rawSubtotal < PRICING.eventMinimum;
+  const subtotal = minimumApplied ? PRICING.eventMinimum : rawSubtotal;
   const tax     = subtotal * PRICING.salesTaxRate;
-  const service = subtotal * PRICING.serviceFeeRate;
+  const service = subtotal * serviceFeeRate;
   const charge  = subtotal * PRICING.chargeFeeRate;
   const total   = subtotal + tax + service + charge;
   const deposit = total * PRICING.depositRate;
@@ -125,6 +144,36 @@ export function calcBar(guests: number, barType: string): BarCalc {
   const charge  = subtotal * PRICING.chargeFeeRate;
   return { base, bartenders, subtotal, tax, service, charge, total: subtotal + tax + service + charge };
 }
+
+// Bar options (rates are editable defaults — real invoices vary $11–35/guest)
+export const BAR_TYPES: Record<string, { perGuest: number; guestsPerBartender: number }> = {
+  'None':          { perGuest: 0,  guestsPerBartender: 0 },
+  'Beer & Wine':   { perGuest: 14, guestsPerBartender: 75 },
+  'Soft Bar':      { perGuest: 26, guestsPerBartender: 75 },
+  'Full Bar':      { perGuest: 29, guestsPerBartender: 50 },
+};
+
+// À la carte add-on presets, with default rates extracted from real invoices.
+// `unit`: 'guest' = price × guest count, 'flat' = one-time, 'each' = price × qty.
+export interface PresetItem { name: string; rate: number; unit: 'guest' | 'flat' | 'each'; }
+export const ADDON_PRESETS: PresetItem[] = [
+  { name: 'Equipment / Rentals',        rate: 21,  unit: 'guest' },
+  { name: 'Graze Table',                rate: 14,  unit: 'guest' },
+  { name: 'Late Night Bites',           rate: 8,   unit: 'guest' },
+  { name: 'Kids Menu',                  rate: 25,  unit: 'guest' },
+  { name: 'Additional Main Entrée',     rate: 12,  unit: 'guest' },
+  { name: 'Flatbread (cocktail hour)',  rate: 6,   unit: 'guest' },
+  { name: 'Coffee & Tea',               rate: 2.85, unit: 'guest' },
+  { name: 'Dessert',                    rate: 4.75, unit: 'guest' },
+  { name: 'Vendor Meals',               rate: 30,  unit: 'each' },
+  { name: 'Tasting',                    rate: 250, unit: 'each' },
+  { name: 'Ceremony Chair Flip',        rate: 150, unit: 'flat' },
+  { name: 'Bar Production Fee (2nd bar)', rate: 0, unit: 'flat' },
+  { name: 'Full Sheet Cake',            rate: 385, unit: 'flat' },
+  { name: 'Half Sheet Cake',            rate: 186, unit: 'flat' },
+  { name: 'Cutting Cake',               rate: 70,  unit: 'flat' },
+  { name: 'Welcome Refreshment',        rate: 0,   unit: 'flat' },
+];
 
 export const fmt  = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
 export const fmtD = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

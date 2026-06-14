@@ -148,12 +148,21 @@ export async function POST(req: NextRequest) {
         basePriceMoney: { amount: toCents(Number(it.amount) || 0), currency: 'USD' as const },
       }));
 
+    // Apply discount as an order-level discount (Square line items can't be negative)
+    const discountAmt = Number(event.estimate_discount) || 0;
+    const orderDiscounts = discountAmt > 0 ? [{
+      name: event.estimate_discount_label ? String(event.estimate_discount_label) : 'Discount',
+      amountMoney: { amount: toCents(discountAmt), currency: 'USD' as const },
+      scope: 'ORDER' as const,
+    }] : undefined;
+
     // 3. Create order
     const orderResp = await squareClient.orders.create({
       idempotencyKey: `apf-order-${event_id}-${stamp}`,
       order: {
         locationId: squareLocationId,
         lineItems,
+        discounts: orderDiscounts,
         referenceId: String(event_id),
       },
     });
