@@ -743,6 +743,10 @@ export default function AdminDashboard() {
           />
         </div>
         <div style={{ flex: 1 }} />
+        <button onClick={() => setCompact(c => !c)} className="compact-btn-desktop" title="Tighten table rows and hide secondary columns" style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
+          {compact ? 'Compact ✓' : 'Compact'}
+        </button>
+        <style>{`.compact-btn-desktop { display: inline-flex; } @media (max-width: 640px) { .compact-btn-desktop { display: none !important; } }`}</style>
       </div>
 
       {/* Responsive table↔cards toggle — global so it applies on every tab */}
@@ -768,10 +772,6 @@ export default function AdminDashboard() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button onClick={() => setCompact(c => !c)} className="compact-btn-desktop" style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
-                {compact ? 'Compact ✓' : 'Compact'}
-              </button>
-              <style>{`.compact-btn-desktop { display: inline-flex; } @media (max-width: 640px) { .compact-btn-desktop { display: none !important; } }`}</style>
               <div style={{ flex: 1 }} />
               <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
                 + Add Event
@@ -1011,12 +1011,12 @@ export default function AdminDashboard() {
                 <tr style={{ background: 'var(--paper)' }}>
                   <PlainTh label="Name" />
                   <PlainTh label="Email" />
-                  <PlainTh label="Phone" />
+                  {!compact && <PlainTh label="Phone" />}
                   <SortTh label="Event Date" field="event_date" sort={leadSort} onToggle={() => toggleLeadSort('event_date')} />
                   <PlainTh label="Guests" />
                   <PlainTh label="Style" />
-                  <PlainTh label="Bar" />
-                  <SortTh label="Submitted" field="created_at" sort={leadSort} onToggle={() => toggleLeadSort('created_at')} />
+                  {!compact && <PlainTh label="Bar" />}
+                  {!compact && <SortTh label="Submitted" field="created_at" sort={leadSort} onToggle={() => toggleLeadSort('created_at')} />}
                   <PlainTh label="" />
                   <PlainTh label="" />
                 </tr>
@@ -1034,18 +1034,18 @@ export default function AdminDashboard() {
                     const rel = relDate(lead.event_date ? String(lead.event_date) : null);
                     return (
                       <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)', animation: 'rowIn 0.15s ease' }}>
-                        <td style={{ padding: '12px 16px', fontWeight: 500 }}>{`${lead.first_name} ${lead.last_name}`}</td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.email || '—')}</td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.phone || '—')}</td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: compact ? '5px 10px' : '12px 16px', fontWeight: 500, fontSize: compact ? 12 : 'inherit' }}>{`${lead.first_name} ${lead.last_name}`}</td>
+                        <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{String(lead.email || '—')}</td>
+                        {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{String(lead.phone || '—')}</td>}
+                        <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-2)', whiteSpace: 'nowrap', fontSize: compact ? 12 : 'inherit' }}>
                           {fmt(lead.event_date ? String(lead.event_date) : null)}
                           {rel && <span style={{ fontSize: 10, color: 'var(--brass)', marginLeft: 6, fontWeight: 500 }}>{rel}</span>}
                         </td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-2)', textAlign: 'right' }}>{lead.guests ? String(lead.guests) : '—'}</td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>
-                        <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-2)', textAlign: 'right', fontSize: compact ? 12 : 'inherit' }}>{lead.guests ? String(lead.guests) : '—'}</td>
+                        <td style={{ padding: compact ? '5px 10px' : '12px 16px', color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{lead.preferred_style ? String(lead.preferred_style) : '—'}</td>
+                        {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-3)' }}>{lead.bar_package ? String(lead.bar_package) : '—'}</td>}
+                        {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(lead.created_at ? String(lead.created_at) : null)}</td>}
+                        <td style={{ padding: compact ? '5px 8px' : '12px 16px' }}>
                           {leadFilter === 'active' ? (
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'nowrap' }}>
                               <button onClick={() => setConverting(lead)} style={{ background: 'var(--brass)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--sans)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
@@ -1111,10 +1111,10 @@ export default function AdminDashboard() {
                           const day = firstDay(event);
                           return (
                             <tr key={String(event.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
-                              <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--ink-3)' }}>{String(event.client_names)}</td>
-                              <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 13 }}>{fmt(day ? String(day.event_date) : null)}</td>
-                              <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 12 }}>Deleted {fmt(String(event.deleted_at))}</td>
-                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                              <td style={{ padding: compact ? '5px 12px' : '12px 16px', fontWeight: 500, color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{String(event.client_names)}</td>
+                              <td style={{ padding: compact ? '5px 12px' : '12px 16px', color: 'var(--ink-4)', fontSize: compact ? 12 : 13 }}>{fmt(day ? String(day.event_date) : null)}</td>
+                              {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 12 }}>Deleted {fmt(String(event.deleted_at))}</td>}
+                              <td style={{ padding: compact ? '5px 12px' : '12px 16px', textAlign: 'right' }}>
                                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                                   <button onClick={() => restore('event', String(event.id))} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}>Restore</button>
                                   <button onClick={() => purge('event', String(event.id))} style={{ background: 'none', border: '1px solid #e2bcbc', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--red)', fontFamily: 'var(--sans)' }}>Delete forever</button>
@@ -1136,10 +1136,10 @@ export default function AdminDashboard() {
                       <tbody>
                         {trash.leads.map(lead => (
                           <tr key={String(lead.id)} style={{ borderBottom: '1px solid var(--paper-3)' }}>
-                            <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--ink-3)' }}>{`${lead.first_name} ${lead.last_name}`}</td>
-                            <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 13 }}>{String(lead.email || '—')}</td>
-                            <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 12 }}>Deleted {fmt(String(lead.deleted_at))}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                            <td style={{ padding: compact ? '5px 12px' : '12px 16px', fontWeight: 500, color: 'var(--ink-3)', fontSize: compact ? 12 : 'inherit' }}>{`${lead.first_name} ${lead.last_name}`}</td>
+                            <td style={{ padding: compact ? '5px 12px' : '12px 16px', color: 'var(--ink-4)', fontSize: compact ? 12 : 13 }}>{String(lead.email || '—')}</td>
+                            {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 12 }}>Deleted {fmt(String(lead.deleted_at))}</td>}
+                            <td style={{ padding: compact ? '5px 12px' : '12px 16px', textAlign: 'right' }}>
                               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                                 <button onClick={() => restore('lead', String(lead.id))} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)' }}>Restore</button>
                                 <button onClick={() => purge('lead', String(lead.id))} style={{ background: 'none', border: '1px solid #e2bcbc', borderRadius: 'var(--r-sm)', padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--red)', fontFamily: 'var(--sans)' }}>Delete forever</button>
