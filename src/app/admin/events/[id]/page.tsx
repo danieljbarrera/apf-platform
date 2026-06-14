@@ -499,6 +499,20 @@ export default function EventDetailPage() {
             <div style={{ flex: 1 }} />
             {!!event.square_invoice_url && <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>}
           </div>
+          {/* Money summary: Total / Paid / Balance */}
+          {!!event.estimate_total && (() => {
+            const total = Number(event.estimate_total) || 0;
+            const paid = Number(event.amount_paid) || 0;
+            const balance = Math.round((total - paid) * 100) / 100;
+            const money = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return (
+              <div style={{ display: 'flex', gap: 28, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--paper-3)', flexWrap: 'wrap' }}>
+                <div><div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 2 }}>Total</div><div style={{ fontFamily: 'var(--serif)', fontSize: '1.15rem' }}>{money(total)}</div></div>
+                <div><div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 2 }}>Paid</div><div style={{ fontFamily: 'var(--serif)', fontSize: '1.15rem', color: 'var(--green)' }}>{money(paid)}</div></div>
+                <div><div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', fontWeight: 600, marginBottom: 2 }}>Balance Due</div><div style={{ fontFamily: 'var(--serif)', fontSize: '1.15rem', color: balance > 0 ? 'var(--brass)' : 'var(--green)' }}>{money(balance)}</div></div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

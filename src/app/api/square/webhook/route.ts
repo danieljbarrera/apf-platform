@@ -83,8 +83,11 @@ export async function POST(req: NextRequest) {
         const deposit = requests.find(r => r.request_type === 'DEPOSIT');
         const balance = requests.find(r => r.request_type === 'BALANCE');
 
-        const depositPaid = deposit && money(deposit.total_completed_amount_money as { amount?: number }) > 0;
-        const balancePaid = balance && money(balance.total_completed_amount_money as { amount?: number }) > 0;
+        const depComplete = deposit ? money(deposit.total_completed_amount_money as { amount?: number }) : 0;
+        const balComplete = balance ? money(balance.total_completed_amount_money as { amount?: number }) : 0;
+        const depositPaid = depComplete > 0;
+        const balancePaid = balComplete > 0;
+        updates.amount_paid = Math.round((depComplete + balComplete) * 100) / 100;
 
         const todayDate = new Date().toISOString().split('T')[0];
         let depositJustLanded = false;

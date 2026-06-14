@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
       const updates: Record<string, unknown> = {
         square_invoice_url: primary.public_url,
         square_invoice_status: primary.status,
+        amount_paid: Math.round((primary.deposit_paid + primary.balance_paid) * 100) / 100,
       };
       if (primary.deposit_paid > 0 && !event.deposit_paid_at) {
         updates.deposit_paid_at = new Date().toISOString();

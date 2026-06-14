@@ -19,18 +19,16 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const dry = body.dry !== false; // default to dry-run for safety
+  const refresh = body.refresh === true; // re-pull already-linked production events
 
   const { client, locationId } = squareFor('production');
   if (!locationId) return NextResponse.json({ error: 'Production credentials not configured in Vercel.' }, { status: 400 });
   const dashHost = dashHostFor('production');
 
-  // Target: imported events not yet linked, with a client email to match on
-  const { data: events } = await supabaseAdmin
-    .from('events')
-    .select('id, client_names, client_email, estimate_total')
-    .is('deleted_at', null)
-    .is('square_invoice_id', null)
-    .ilike('internal_notes', 'Imported from Square invoice%');
+  // Default: imported events not yet linked. Refresh: re-pull linked production events.
+  let q = supabaseAdmin.from('events').select('id, client_names, client_email, estimate_total').is('deleted_at', null);
+  q = refresh ? q.eq('square_env', 'production') : q.is('square_invoice_id', null).ilike('internal_notes', 'Imported from Square invoice%');
+  const { data: events } = await q;
 
   const results: Record<string, unknown>[] = [];
 
@@ -116,6 +114,7 @@ export async function POST(req: NextRequest) {
           retainer_invoice_sent: inv.status !== 'DRAFT',
           deposit_paid_at: depositPaid > 0 ? new Date().toISOString() : null,
           balance_paid_at: balancePaid > 0 ? new Date().toISOString() : null,
+          amount_paid: Math.round((depositPaid + balancePaid) * 100) / 100,
         };
         if (lineItems.length) {
           update.estimate_line_items = lineItems;

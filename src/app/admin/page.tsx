@@ -72,6 +72,10 @@ function firstDay(event: Event) {
   return days.slice().sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))[0];
 }
 
+function moneyShort(n: number) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+
 function totalGuests(event: Event) {
   // Only count main catering days — tastings/rehearsals shouldn't inflate headcount
   return ((event.event_days as Event[]) || []).filter(d => (d.day_type || 'Main') === 'Main').reduce((s, d) => s + (Number(d.guests) || 0), 0);
@@ -799,6 +803,10 @@ export default function AdminDashboard() {
                         {rel && <span style={{ fontSize: 10, color: 'var(--brass)', background: 'var(--paper-2)', borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{rel}</span>}
                       </div>
                       {day && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 8 }}>{String(day.venue || '—')} · {totalGuests(event) || '—'} guests · {String(day.service_style || '—')}</div>}
+                      {!!event.square_invoice_id && !!event.estimate_total && (() => {
+                        const bal = Math.round(((Number(event.estimate_total)||0) - (Number(event.amount_paid)||0)) * 100) / 100;
+                        return <div style={{ fontSize: 12, marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>{moneyShort(Number(event.amount_paid)||0)} paid</span><span style={{ color: 'var(--ink-4)' }}> · </span><span style={{ color: bal > 0 ? 'var(--brass)' : 'var(--green)', fontWeight: 600 }}>{moneyShort(bal)} balance</span></div>;
+                      })()}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--paper-3)' }}>
                         <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{done}/{BOOL_FIELDS.length} checklist</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -826,13 +834,14 @@ export default function AdminDashboard() {
                   <PlainTh label="Guests" />
                   <PlainTh label="Style" />
                   <PlainTh label="Status" />
+                  <PlainTh label="Balance" />
                   <PlainTh label="Checklist" />
                   {!compact && <SortTh label="Submitted" field="created_at" sort={eventSort} onToggle={() => toggleEventSort('created_at')} />}
                   <PlainTh label="" />
                 </tr>
               </thead>
               <tbody key={`events-${statusFilter}-${q}`}>
-                {loading ? <SkeletonRows cols={9} /> : filteredEvents.length === 0 ? (
+                {loading ? <SkeletonRows cols={10} /> : filteredEvents.length === 0 ? (
                   <EmptyState icon="✦" title={search ? 'No events match your search' : statusFilter !== 'All' ? `No ${statusFilter} events` : 'No events yet'} sub={search ? 'Try a different search term' : statusFilter !== 'All' ? 'Try a different status filter' : 'Events appear here once a lead is converted'} />
                 ) : filteredEvents.map((event) => {
                   const day = firstDay(event);
@@ -867,6 +876,13 @@ export default function AdminDashboard() {
                             <DepositPaid event={event} />
                           </div>
                         )}
+                      </td>
+                      <td style={{ padding: compact ? '5px 10px' : '12px 16px', whiteSpace: 'nowrap', fontSize: compact ? 12 : 13 }}>
+                        {(() => {
+                          if (!event.square_invoice_id || !event.estimate_total) return <span style={{ color: 'var(--ink-4)' }}>—</span>;
+                          const bal = Math.round(((Number(event.estimate_total)||0) - (Number(event.amount_paid)||0)) * 100) / 100;
+                          return <span style={{ color: bal > 0 ? 'var(--brass)' : 'var(--green)', fontWeight: 600 }} title={`${moneyShort(Number(event.amount_paid)||0)} paid of ${moneyShort(Number(event.estimate_total)||0)}`}>{bal > 0 ? moneyShort(bal) : 'Paid'}</span>;
+                        })()}
                       </td>
                       <td style={{ padding: compact ? '5px 10px' : '12px 16px' }}><ProgressBar event={event} /></td>
                       {!compact && <td style={{ padding: '12px 16px', color: 'var(--ink-4)', whiteSpace: 'nowrap', fontSize: 12 }}>{fmt(event.created_at ? String(event.created_at) : null)}</td>}
@@ -993,7 +1009,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody key={`leads-${leadFilter}-${q}`}>
-                {loading ? <SkeletonRows cols={9} /> : (() => {
+                {loading ? <SkeletonRows cols={10} /> : (() => {
                   const displayLeads = leadFilter === 'lost' ? lostLeads : sortedLeads;
                   if (displayLeads.length === 0) return (
                     <EmptyState icon="✦"
