@@ -96,14 +96,23 @@ Columns are nullable by default — existing rows unaffected.
 - **Invoices** — same as above; Square handles payment collection.
 - **Event Order** — currently a Google Doc. Best candidate to generate as PDF natively from app data (all fields already exist in the events table).
 
-## Pricing model (quote app — verified against Square estimate #2687)
-- **Food:** $65/guest, all styles
-- **Staffing:** waitstaff ratio Buffet 1:25 / Family Style 1:13 / Plated 1:10; **floor** the count (matches her invoices); $40/hr waitstaff, $50/hr captain; hours = event hours + 4
-- **Add-ons per guest:** appetizers $3/each (0–6), dessert $4.75, coffee & tea $2.85
-- **Bar:** Soft Bar $26/guest (1:75 bartender), Full Bar $29/guest (1:50)
-- **$5,000 event minimum** applied to subtotal
-- **Fees:** sales tax 9.25%, service fee 10%, card processing 3.5% (waived for check/cash)
-- **Deposit:** 25% of total
+## Pricing model — SMART DEFAULTS, fully overridable (verified against ~40 real invoices)
+The public quote form uses these as fixed defaults. The **admin estimate** (`/admin/events/[id]/estimate`) exposes every value as an editable knob, because real invoices vary heavily. The formula is a *starting point*, not gospel.
+
+**Standard defaults (validated to the penny by estimate #2687):**
+- **Food:** $65/guest — but real invoices range $48–$185/guest by menu tier (editable per event)
+- **Staffing:** ratio Buffet 1:25 / Family 1:13 / Plated 1:10, **floored**; $40/hr waitstaff, $50/hr captain; hours = event hours + setup/breakdown. **Confirmed: +4 hrs is standard, but +3 (2 setup + 1 breakdown) is common.** Ratio, setup/breakdown hrs, and captain are all overridable.
+- **Captain:** included by default, but **often dropped** (or replaced by a "lead waitstaff @ $50") — toggle.
+- **Add-ons per guest:** appetizers $3/each (or $2), dessert $4.75, coffee & tea $2.85. **Coffee uses a reduced count** (not full headcount) — separate `coffee_guests`.
+- **Bar:** Beer & Wine ~$14, Soft $26 (1:75), Full $29 (1:50) — all $/guest editable ($11–35 seen). 2nd bar adds 20% production fee.
+- **$5,000 event minimum:** a quoting guideline, **never billed as a line** — off by default in admin estimate (`apply_event_minimum`).
+- **Fees:** sales tax 9.25%; **service fee 10% default but 5% and 15% also occur — selectable**; card processing 3.5% **only on card** (absent on cash/check/Zelle/Venmo/ACH).
+- **Deposit:** 25% of total — editable amount.
+- **Discounts:** ad hoc 5–15% (Early Bird, Loyalty, etc.) — applied as a Square order-level discount.
+
+**À la carte add-on presets** (rates in `src/lib/pricing.ts` `ADDON_PRESETS`): Equipment/Rentals $21/g, Graze Table $14/g, Late Night Bites $8/g, Kids Menu $25/g, Additional Entrée $12/g, Flatbread $6/g, Vendor Meals $30/ea, Tasting $250/ea, Chair Flip $150 flat, cakes (sheet $385 / half $186 / cutting $70).
+
+**Event types** seen: weddings, rehearsal dinners (often a separate invoice → model as a `Rehearsal Dinner` sub-day), private dinners, drop-offs, charcuterie, celebrations of life. Tastings are billable and modeled as `Tasting` sub-days (excluded from catering headcount).
 
 ## Quote app UX (intentional — don't undo)
 - 3-step: event builder → contact capture → estimate reveal
@@ -114,8 +123,12 @@ Columns are nullable by default — existing rows unaffected.
 ## Supabase free tier
 Projects pause after 1 week of inactivity. Visit the dashboard periodically or upgrade to Pro ($25/mo) once real leads come in.
 
-## Open questions (confirm with owner)
-- Waitstaff floor-rounding: policy or one-off?
-- Bar deposit: 25% of combined total, or deposited separately?
-- Coffee & tea: full guest count or her judgment per event?
-- Square API: does she want estimates/invoices auto-generated, or prefer manual control?
+## Open questions — RESOLVED from invoice analysis (Jun 2026)
+- ~~Waitstaff floor-rounding~~ → default floor, but she overrides the ratio per event (Family 1:13 *and* 1:15 seen)
+- ~~Coffee & tea: full count or judgment~~ → **reduced count** per event (separate `coffee_guests` field)
+- ~~Square API: auto-generate or manual~~ → **she creates the estimate in the app, app pushes a draft invoice to Square** (Square API can't create estimates). She reviews/sends from Square (SHARE_MANUALLY = no auto-email to client).
+- Bar deposit: still combined into the 25% deposit of the grand total.
+
+## Still open
+- Service fee 5 vs 10 vs 15%: no formula found — her per-event call (defaults 10%)
+- Discounts: named (Early Bird/Loyalty) but criteria are ad hoc
