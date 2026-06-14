@@ -292,6 +292,10 @@ export default function EstimatePage() {
               <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>Review the draft in Square, then send it from there.</span>
               <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Unlink</button>
             </div>
+          ) : !event.client_email && !event.client_phone ? (
+            <div style={{ background: '#fff8ed', border: '1px solid #d97706', borderRadius: 'var(--r-sm)', padding: '10px 14px', fontSize: 12, color: '#92400e' }}>
+              Add a <strong>client email or phone</strong> on the <button onClick={() => router.push(`/admin/events/${id}`)} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, padding: 0 }}>event page</button> before creating the invoice — Square needs it to send.
+            </div>
           ) : (
             <div>
               <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Invoice in Square'}</button>

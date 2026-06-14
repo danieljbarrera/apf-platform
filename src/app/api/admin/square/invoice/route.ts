@@ -55,6 +55,11 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }).eq('id', event_id);
   }
 
+  // Square requires the recipient to have an email or phone to publish an invoice
+  if (!event.client_email && !event.client_phone) {
+    return NextResponse.json({ error: 'Add a client email or phone on the event before creating an invoice — Square needs it to send the invoice.' }, { status: 400 });
+  }
+
   const days = ((event.event_days || []) as Record<string, unknown>[])
     .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
   const firstDay = days[0];
@@ -114,6 +119,14 @@ export async function POST(req: NextRequest) {
         // can span multiple events. Events are tied to invoices, not customers.
       });
       customerId = custResp.customer?.id;
+    } else if (customerId) {
+      // Reusing an existing customer — make sure it carries current contact info
+      // (Square needs email/phone to publish the invoice).
+      await squareClient.customers.update({
+        customerId,
+        emailAddress: event.client_email ? String(event.client_email) : undefined,
+        phoneNumber: event.client_phone ? String(event.client_phone) : undefined,
+      }).catch(e => console.error('Customer update failed:', e));
     }
     if (customerId && customerId !== event.square_customer_id) {
       await supabaseAdmin.from('events').update({ square_customer_id: customerId }).eq('id', event_id);
