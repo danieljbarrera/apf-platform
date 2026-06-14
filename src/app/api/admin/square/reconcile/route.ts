@@ -59,8 +59,10 @@ export async function POST(req: NextRequest) {
       const best = scored[0];
       const inv = best.inv;
 
-      // Pull the exact, FULL breakdown from the order: products + service charges
-      // (service/processing fees) + taxes, so the lines sum to the real total.
+      // Reconstruct a clean breakdown: products (PRE-tax grossSales) + service
+      // charges + one combined Sales Tax line. (Line totalMoney already bakes in
+      // tax, so we use grossSalesMoney to avoid double-counting.) A guard line
+      // forces the displayed total to match the real invoice exactly.
       let lineItems: { name: string; quantity: string; amount: number }[] = [];
       let orderTotal = 0, orderDiscount = 0;
       if (inv.orderId) {
@@ -68,10 +70,16 @@ export async function POST(req: NextRequest) {
         const order = ordResp.order;
         orderTotal = cents(order?.totalMoney);
         orderDiscount = cents(order?.totalDiscountMoney);
-        const products = (order?.lineItems || []).map(li => ({ name: li.name || 'Item', quantity: '1', amount: cents(li.totalMoney) }));
+        const products = (order?.lineItems || []).map(li => ({ name: li.name || 'Item', quantity: '1', amount: cents(li.grossSalesMoney) || (cents(li.totalMoney) - cents(li.totalTaxMoney)) }));
         const charges = (order?.serviceCharges || []).map(sc => ({ name: sc.name || 'Service Charge', quantity: '1', amount: cents(sc.totalMoney) || cents(sc.appliedMoney) }));
-        const taxes = (order?.taxes || []).map(tx => ({ name: tx.name || 'Tax', quantity: '1', amount: cents(tx.appliedMoney) }));
-        lineItems = [...products, ...charges, ...taxes].filter(li => li.amount > 0);
+        const tax = cents(order?.totalTaxMoney);
+        lineItems = [...products, ...charges];
+        if (tax > 0) lineItems.push({ name: 'Sales Tax', quantity: '1', amount: tax });
+        lineItems = lineItems.filter(li => li.amount > 0);
+        // Force exactness: displayed total = sum(lines) - discount must equal orderTotal
+        const lineSumRaw = Math.round(lineItems.reduce((s, li) => s + li.amount, 0) * 100) / 100;
+        const adj = Math.round((orderTotal - (lineSumRaw - orderDiscount)) * 100) / 100;
+        if (Math.abs(adj) >= 0.01) lineItems.push({ name: 'Adjustment', quantity: '1', amount: adj });
       }
 
       const dep = (inv.paymentRequests || []).find(r => r.requestType === 'DEPOSIT');
@@ -82,12 +90,13 @@ export async function POST(req: NextRequest) {
       const lineSum = Math.round(lineItems.reduce((s, li) => s + li.amount, 0) * 100) / 100;
       const finalTotal = orderTotal || best.tot;
 
+      const displayedTotal = Math.round((lineSum - orderDiscount) * 100) / 100;
       const plan = {
         event: ev.client_names,
         matched_invoice: inv.invoiceNumber || inv.id,
-        invoice_total: best.tot,
         order_total: orderTotal,
-        line_sum: lineSum,            // should equal order_total
+        displayed_total: displayedTotal,  // must equal order_total
+        match_ok: Math.abs(displayedTotal - orderTotal) < 0.01,
         discount: orderDiscount,
         line_items: lineItems.length,
         status: inv.status,
