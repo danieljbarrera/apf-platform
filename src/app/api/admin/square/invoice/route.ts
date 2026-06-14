@@ -31,12 +31,28 @@ export async function POST(req: NextRequest) {
     .single();
   if (evErr || !event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
 
+  // If an invoice is already linked, clean it up before making a new one so we
+  // never accumulate orphaned invoices in Square. Refuse if it's already been paid.
   if (event.square_invoice_id) {
-    return NextResponse.json({
-      invoice_id: event.square_invoice_id,
-      invoice_url: event.square_invoice_url,
-      already_exists: true,
-    });
+    try {
+      const existing = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
+      const inv = existing.invoice;
+      const st = inv?.status;
+      if (st === 'PAID' || st === 'PARTIALLY_PAID') {
+        return NextResponse.json({ error: 'This invoice has already been paid — cancel it in Square manually before recreating.' }, { status: 400 });
+      }
+      if (inv?.id) {
+        if (st === 'DRAFT') {
+          await squareClient.invoices.delete({ invoiceId: inv.id, version: inv.version ?? 0 });
+        } else if (st !== 'CANCELED') {
+          await squareClient.invoices.cancel({ invoiceId: inv.id, version: inv.version ?? 0 });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to clean up existing invoice:', e);
+      // Continue — if it's already gone, that's fine
+    }
+    await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }).eq('id', event_id);
   }
 
   const days = ((event.event_days || []) as Record<string, unknown>[])
@@ -188,6 +204,34 @@ export async function POST(req: NextRequest) {
     console.error('Square invoice error:', e);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+// Cancels/deletes the linked Square invoice and detaches it from the event.
+export async function DELETE(req: NextRequest) {
+  const user = await verifyAuth(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { event_id } = await req.json();
+  if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
+
+  const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id').eq('id', event_id).single();
+  if (event?.square_invoice_id) {
+    try {
+      const existing = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
+      const inv = existing.invoice;
+      if (inv?.status === 'PAID' || inv?.status === 'PARTIALLY_PAID') {
+        return NextResponse.json({ error: 'This invoice has been paid — cancel it in Square manually.' }, { status: 400 });
+      }
+      if (inv?.id) {
+        if (inv.status === 'DRAFT') await squareClient.invoices.delete({ invoiceId: inv.id, version: inv.version ?? 0 });
+        else if (inv.status !== 'CANCELED') await squareClient.invoices.cancel({ invoiceId: inv.id, version: inv.version ?? 0 });
+      }
+    } catch (e) {
+      console.error('Unlink cleanup failed:', e);
+    }
+  }
+  await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }).eq('id', event_id);
+  return NextResponse.json({ ok: true });
 }
 
 export async function GET(req: NextRequest) {

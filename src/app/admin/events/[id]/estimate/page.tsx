@@ -171,9 +171,11 @@ export default function EstimatePage() {
     loadEvent();
   }
   async function unlinkInvoice() {
-    if (!confirm('Unlink the Square invoice from this event? The invoice stays in Square (cancel it there if needed); this just lets you create a new draft.')) return;
-    await authFetch(`/api/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }) });
-    setInvoiceMsg(''); loadEvent();
+    if (!confirm('Cancel this invoice in Square and unlink it from the event? (Paid invoices cannot be canceled here.)')) return;
+    const res = await authFetch('/api/admin/square/invoice', { method: 'DELETE', body: JSON.stringify({ event_id: id }) });
+    const data = await res.json();
+    if (!res.ok) { setInvoiceMsg(data.error || 'Failed to unlink'); return; }
+    setInvoiceMsg('Invoice canceled in Square and unlinked'); loadEvent();
   }
   async function syncSquare() {
     setSyncing(true);
