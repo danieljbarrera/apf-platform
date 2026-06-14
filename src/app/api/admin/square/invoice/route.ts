@@ -138,11 +138,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Build line items from the APPROVED estimate (exact numbers she signed off on)
+    // Each line's `amount` is already the full line total, so quantity is always
+    // 1 — otherwise Square multiplies the total by the guest count.
     const lineItems = approvedItems
       .filter(it => (Number(it.amount) || 0) > 0)
       .map(it => ({
         name: it.name || 'Item',
-        quantity: it.quantity || '1',
+        quantity: '1',
         basePriceMoney: { amount: toCents(Number(it.amount) || 0), currency: 'USD' as const },
       }));
 
