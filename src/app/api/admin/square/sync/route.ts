@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const { event_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
-  const { data: event } = await supabaseAdmin.from('events').select('square_customer_id, square_invoice_id').eq('id', event_id).single();
+  const { data: event } = await supabaseAdmin.from('events').select('square_customer_id, square_invoice_id, deposit_paid_at, balance_paid_at').eq('id', event_id).single();
   if (!event?.square_customer_id) {
     return NextResponse.json({ invoices: [], message: 'No Square customer linked yet' });
   }
@@ -36,23 +36,34 @@ export async function POST(req: NextRequest) {
       limit: 100,
     });
 
-    const invoices = (resp.invoices ?? []).map(inv => ({
-      id: inv.id,
-      invoice_number: inv.invoiceNumber,
-      status: inv.status,
-      public_url: inv.publicUrl || `${dashHost}/dashboard/invoices/${inv.id}`,
-      title: inv.title,
-      total: inv.paymentRequests?.reduce((s, r) => s + (r.computedAmountMoney?.amount ? Number(r.computedAmountMoney.amount) / 100 : 0), 0) ?? null,
-    }));
+    const cents = (m: { amount?: bigint | null } | undefined) => m?.amount ? Number(m.amount) / 100 : 0;
 
-    // Refresh the event's primary invoice link/status from the matching record
+    const invoices = (resp.invoices ?? []).map(inv => {
+      const dep = inv.paymentRequests?.find(r => r.requestType === 'DEPOSIT');
+      const bal = inv.paymentRequests?.find(r => r.requestType === 'BALANCE');
+      return {
+        id: inv.id,
+        invoice_number: inv.invoiceNumber,
+        status: inv.status,
+        public_url: inv.publicUrl || `${dashHost}/dashboard/invoices/${inv.id}`,
+        title: inv.title,
+        total: inv.paymentRequests?.reduce((s, r) => s + cents(r.computedAmountMoney), 0) ?? null,
+        deposit_paid: dep ? cents(dep.totalCompletedAmountMoney) : 0,
+        balance_paid: bal ? cents(bal.totalCompletedAmountMoney) : 0,
+      };
+    });
+
+    // Refresh the event's primary invoice from the matching record
     const primary = invoices.find(i => i.id === event.square_invoice_id) || invoices[0];
     if (primary) {
-      await supabaseAdmin.from('events').update({
+      const updates: Record<string, unknown> = {
         square_invoice_id: primary.id,
         square_invoice_url: primary.public_url,
         square_invoice_status: primary.status,
-      }).eq('id', event_id);
+      };
+      if (primary.deposit_paid > 0 && !event.deposit_paid_at) updates.deposit_paid_at = new Date().toISOString();
+      if (primary.balance_paid > 0 && !event.balance_paid_at) updates.balance_paid_at = new Date().toISOString();
+      await supabaseAdmin.from('events').update(updates).eq('id', event_id);
     }
 
     return NextResponse.json({ invoices });
