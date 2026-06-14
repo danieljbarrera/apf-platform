@@ -770,8 +770,8 @@ export default function AdminDashboard() {
             {t === 'events' ? `Events (${events.length})` : t === 'leads' ? `Leads (${leads.length})` : `Trash${trashCount > 0 ? ` (${trashCount})` : ''}`}
           </button>
         ))}
-        <div style={{ flex: 1, minWidth: 12 }} />
-        <div style={{ display: 'flex', gap: 8, paddingBottom: 7 }}>
+        <div className="tab-spacer" style={{ flex: 1, minWidth: 12 }} />
+        <div className="tab-add-group" style={{ display: 'flex', gap: 8, paddingBottom: 7 }}>
           <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
             + Add Lead
           </button>
@@ -779,6 +779,11 @@ export default function AdminDashboard() {
             + Add Event
           </button>
         </div>
+        <style>{`@media (max-width: 640px) {
+          .tab-spacer { display: none !important; }
+          .tab-add-group { width: 100%; padding-bottom: 0 !important; margin-top: 10px; }
+          .tab-add-group button { flex: 1; padding: 9px 16px !important; }
+        }`}</style>
       </div>
 
       {/* Events tab */}
