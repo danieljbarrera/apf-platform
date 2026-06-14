@@ -752,7 +752,7 @@ export default function AdminDashboard() {
       {/* Responsive table↔cards toggle — global so it applies on every tab */}
       <style>{`.event-table-wrap { display: block; } .event-cards-wrap { display: none; } @media (max-width: 640px) { .event-table-wrap { display: none; } .event-cards-wrap { display: block; } }`}</style>
 
-      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {(['events', 'leads', 'trash'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{
@@ -770,6 +770,15 @@ export default function AdminDashboard() {
             {t === 'events' ? `Events (${events.length})` : t === 'leads' ? `Leads (${leads.length})` : `Trash${trashCount > 0 ? ` (${trashCount})` : ''}`}
           </button>
         ))}
+        <div style={{ flex: 1, minWidth: 12 }} />
+        <div style={{ display: 'flex', gap: 8, paddingBottom: 7 }}>
+          <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+            + Add Lead
+          </button>
+          <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
+            + Add Event
+          </button>
+        </div>
       </div>
 
       {/* Events tab */}
@@ -782,15 +791,6 @@ export default function AdminDashboard() {
                   {s}
                 </button>
               ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <div style={{ flex: 1 }} />
-              <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
-                + Add Lead
-              </button>
-              <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
-                + Add Event
-              </button>
             </div>
           </div>
           {/* Mobile cards */}
@@ -946,13 +946,6 @@ export default function AdminDashboard() {
                 </button>
               ))}
             </div>
-            <div style={{ flex: 1 }} />
-            <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
-              + Add Lead
-            </button>
-            <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
-              + Add Event
-            </button>
           </div>
           {/* Mobile lead cards */}
           <div className="event-cards-wrap">
