@@ -467,7 +467,8 @@ export default function EventDetailPage() {
             <button onClick={() => router.push(`/admin/events/${id}/estimate`)} style={{ background: 'none', border: 'none', color: 'var(--brass)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', padding: 0 }}>Estimate →</button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {!!event.square_invoice_status && (() => {
+            {/* Show the Square status pill only for lifecycle states the green paid badges don't already cover */}
+            {!!event.square_invoice_status && !['PARTIALLY_PAID', 'PAID'].includes(String(event.square_invoice_status)) && (() => {
               const s = SQUARE_STATUS[String(event.square_invoice_status)] || { label: String(event.square_invoice_status), color: 'var(--ink-3)', bg: 'var(--paper-2)' };
               return <span style={{ fontSize: 12, fontWeight: 600, color: s.color, background: s.bg, borderRadius: 99, padding: '4px 12px' }}>{s.label}</span>;
             })()}
