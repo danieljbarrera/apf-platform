@@ -89,35 +89,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Build line items
+    // 2. Build itemized line items
     const serviceBase = pkg.subtotal + (bar?.subtotal || 0);
-    const lineItems = [
+    const lineItems: { name: string; quantity: string; basePriceMoney: { amount: bigint; currency: 'USD' } }[] = [
       {
-        name: `Catering Services — ${style} for ${guests} guests`,
-        quantity: '1',
-        basePriceMoney: { amount: toCents(pkg.subtotal), currency: 'USD' as const },
-      },
-      ...(bar ? [{
-        name: `Bar Package — ${barPackage}`,
-        quantity: '1',
-        basePriceMoney: { amount: toCents(bar.subtotal), currency: 'USD' as const },
-      }] : []),
-      {
-        name: 'Service Fee (10%)',
-        quantity: '1',
-        basePriceMoney: { amount: toCents(serviceBase * 0.10), currency: 'USD' as const },
+        name: `Food — ${style} ($65/guest)`,
+        quantity: String(guests),
+        basePriceMoney: { amount: toCents(65), currency: 'USD' },
       },
       {
-        name: 'Sales Tax (9.25%)',
+        name: `Staffing — ${pkg.staffing.waitstaff} waitstaff + ${pkg.staffing.captain} captain × ${pkg.staffing.totalHours} hrs`,
         quantity: '1',
-        basePriceMoney: { amount: toCents(serviceBase * 0.0925), currency: 'USD' as const },
-      },
-      {
-        name: 'Card Processing (3.5%)',
-        quantity: '1',
-        basePriceMoney: { amount: toCents(serviceBase * 0.035), currency: 'USD' as const },
+        basePriceMoney: { amount: toCents(pkg.staffing.cost), currency: 'USD' },
       },
     ];
+    if (pkg.apps > 0) lineItems.push({ name: 'Passed Appetizers', quantity: '1', basePriceMoney: { amount: toCents(pkg.apps), currency: 'USD' } });
+    if (pkg.dessert > 0) lineItems.push({ name: 'Dessert', quantity: '1', basePriceMoney: { amount: toCents(pkg.dessert), currency: 'USD' } });
+    if (pkg.coffee > 0) lineItems.push({ name: 'Coffee & Tea Service', quantity: '1', basePriceMoney: { amount: toCents(pkg.coffee), currency: 'USD' } });
+    if (pkg.minimumApplied) lineItems.push({ name: 'Event Minimum Adjustment', quantity: '1', basePriceMoney: { amount: toCents(pkg.subtotal - pkg.rawSubtotal), currency: 'USD' } });
+    if (bar) lineItems.push({ name: `Bar Package — ${barPackage} (${bar.bartenders} bartender${bar.bartenders > 1 ? 's' : ''})`, quantity: '1', basePriceMoney: { amount: toCents(bar.subtotal), currency: 'USD' } });
+    lineItems.push({ name: 'Service Fee (10%)', quantity: '1', basePriceMoney: { amount: toCents(serviceBase * 0.10), currency: 'USD' } });
+    lineItems.push({ name: 'Sales Tax (9.25%)', quantity: '1', basePriceMoney: { amount: toCents(serviceBase * 0.0925), currency: 'USD' } });
+    lineItems.push({ name: 'Card Processing (3.5%)', quantity: '1', basePriceMoney: { amount: toCents(serviceBase * 0.035), currency: 'USD' } });
 
     // 3. Create order
     const orderResp = await squareClient.orders.create({

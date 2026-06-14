@@ -224,7 +224,7 @@ function ConvertModal({ lead, onClose, onConverted, authFetch }: {
     const res = await authFetch('/api/admin/events', {
       method: 'POST',
       body: JSON.stringify({
-        event: { client_names: clientNames, status: 'New', client_email: lead.email || null, client_phone: lead.phone || null, quote_id: lead.id },
+        event: { client_names: clientNames, status: 'New', client_email: lead.email || null, client_phone: lead.phone || null, quote_id: lead.id, quote_number: lead.quote_number || null },
         days: [{ event_date: lead.event_date, venue: venue.trim(), guests: lead.guests, service_style: lead.preferred_style, sort_order: 0 }],
       }),
     });
@@ -587,7 +587,7 @@ export default function AdminDashboard() {
   const q = search.toLowerCase();
 
   const filteredEvents = (statusFilter === 'All' ? events : events.filter(e => e.status === statusFilter))
-    .filter(e => !q || String(e.client_names).toLowerCase().includes(q) || ((e.event_days as Event[]) || []).some(d => String(d.venue).toLowerCase().includes(q)))
+    .filter(e => !q || String(e.client_names).toLowerCase().includes(q) || String(e.quote_number || '').toLowerCase().includes(q) || ((e.event_days as Event[]) || []).some(d => String(d.venue).toLowerCase().includes(q)))
     .slice().sort((a, b) => {
       let av: string, bv: string;
       if (eventSort.field === 'event_date') {
@@ -601,7 +601,7 @@ export default function AdminDashboard() {
     });
 
   const sortedLeads = leads
-    .filter(l => !q || `${l.first_name} ${l.last_name}`.toLowerCase().includes(q) || String(l.email).toLowerCase().includes(q))
+    .filter(l => !q || `${l.first_name} ${l.last_name}`.toLowerCase().includes(q) || String(l.email).toLowerCase().includes(q) || String(l.quote_number || '').toLowerCase().includes(q))
     .slice().sort((a, b) => {
       const av = String(leadSort.field === 'event_date' ? (a.event_date || '9999') : (a.created_at || ''));
       const bv = String(leadSort.field === 'event_date' ? (b.event_date || '9999') : (b.created_at || ''));

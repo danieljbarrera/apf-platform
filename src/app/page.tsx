@@ -94,6 +94,7 @@ export default function QuotePage() {
 
     const payload = {
       quote_id: quoteId,
+      quote_number: quoteId,
       first_name: fname, last_name: lname, email, phone: phone || null,
       event_date: edate || null, event_type: etype || null, venue: venue || null,
       guests: g, hours: h, preferred_style: state.style,

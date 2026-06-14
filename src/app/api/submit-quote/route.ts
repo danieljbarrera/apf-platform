@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateQuoteNumber } from '@/lib/quote-number';
 
 export async function POST(req: NextRequest) {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
@@ -7,6 +8,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  const quoteNumber = body.quote_number || generateQuoteNumber();
 
   const response = await fetch(`${SUPABASE_URL}/rest/v1/quotes`, {
     method: 'POST',
@@ -16,7 +18,7 @@ export async function POST(req: NextRequest) {
       'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       'Prefer': 'return=minimal',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, quote_number: quoteNumber }),
   });
 
   if (!response.ok) {

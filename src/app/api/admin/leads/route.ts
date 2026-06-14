@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { calcPackage, calcBar, fmtD } from '@/lib/pricing';
+import { generateQuoteNumber } from '@/lib/quote-number';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
     notes, send_email, source,
   } = body;
 
+  const quoteNumber = generateQuoteNumber();
+
   const { data: quote, error } = await supabaseAdmin.from('quotes').insert({
     first_name, last_name, email: email || null, phone: phone || null,
     event_date, guests: Number(guests),
@@ -56,6 +59,7 @@ export async function POST(req: NextRequest) {
     include_coffee: !!include_coffee,
     converted: false,
     source: source || 'manual',
+    quote_number: quoteNumber,
   }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -72,7 +76,7 @@ export async function POST(req: NextRequest) {
       };
       const hasBar = bar_package && bar_package !== 'None';
       const barQuote = hasBar ? calcBar(g, bar_package) : null;
-      const quoteId = `APF-${Date.now().toString(36).toUpperCase()}`;
+      const quoteId = quoteNumber;
       const eventDateFmt = event_date
         ? new Date(event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
         : null;

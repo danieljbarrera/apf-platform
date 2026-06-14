@@ -384,6 +384,7 @@ export default function EventDetailPage() {
       <div className="event-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.9rem', fontWeight: 500, marginBottom: 6 }}>{String(event.client_names)}</h1>
+          {!!event.quote_number && <div style={{ fontSize: 12, color: 'var(--ink-4)', letterSpacing: '0.04em' }}>Quote {String(event.quote_number)}</div>}
         </div>
         <div className="event-header-actions no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)', transition: 'color 0.3s' }}>
