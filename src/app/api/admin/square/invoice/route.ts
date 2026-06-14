@@ -67,8 +67,13 @@ export async function POST(req: NextRequest) {
 
   // Require an approved estimate — the invoice must bill exactly what was approved
   const approvedItems = event.estimate_line_items as { name: string; quantity: string; amount: number }[] | null;
-  if (!approvedItems || !event.estimate_approved_at) {
+  if (!approvedItems || !approvedItems.length || !event.estimate_approved_at) {
     return NextResponse.json({ error: 'Approve the estimate before creating an invoice' }, { status: 400 });
+  }
+
+  const itemsTotal = approvedItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  if (itemsTotal < 0.01 || itemsTotal > 1_000_000) {
+    return NextResponse.json({ error: `Estimate total is $${itemsTotal.toFixed(2)} — must be between $0.01 and $1,000,000. Open the estimate, Unlock, recalculate, and re-approve.` }, { status: 400 });
   }
 
   const guests = Number(event.estimate_guests) || days.reduce((s, d) => s + (Number(d.guests) || 0), 0);
@@ -133,11 +138,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Build line items from the APPROVED estimate (exact numbers she signed off on)
-    const lineItems = approvedItems.map(it => ({
-      name: it.name,
-      quantity: it.quantity || '1',
-      basePriceMoney: { amount: toCents(it.amount), currency: 'USD' as const },
-    }));
+    const lineItems = approvedItems
+      .filter(it => (Number(it.amount) || 0) > 0)
+      .map(it => ({
+        name: it.name || 'Item',
+        quantity: it.quantity || '1',
+        basePriceMoney: { amount: toCents(Number(it.amount) || 0), currency: 'USD' as const },
+      }));
 
     // 3. Create order
     const orderResp = await squareClient.orders.create({
