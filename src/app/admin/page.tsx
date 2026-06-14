@@ -752,9 +752,21 @@ export default function AdminDashboard() {
       {/* Responsive table↔cards toggle — global so it applies on every tab */}
       <style>{`.event-table-wrap { display: block; } .event-cards-wrap { display: none; } @media (max-width: 640px) { .event-table-wrap { display: none; } .event-cards-wrap { display: block; } }`}</style>
 
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem' }}>
         {(['events', 'leads', 'trash'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--brass)' : '2px solid transparent', padding: '10px 20px', fontSize: 13, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--brass)' : 'var(--ink-3)', cursor: 'pointer', fontFamily: 'var(--sans)', marginBottom: -1, letterSpacing: '0.04em' }}>
+          <button key={t} onClick={() => setTab(t)}
+            style={{
+              background: tab === t ? 'var(--paper-2)' : 'transparent',
+              border: '1px solid', borderColor: tab === t ? 'var(--rule)' : 'transparent', borderBottom: 'none',
+              borderRadius: '8px 8px 0 0',
+              padding: '9px 20px', fontSize: 13, fontWeight: tab === t ? 700 : 500,
+              color: tab === t ? 'var(--brass)' : 'var(--ink-2)', cursor: 'pointer', fontFamily: 'var(--sans)',
+              marginBottom: -1, letterSpacing: '0.04em',
+              boxShadow: tab === t ? 'inset 0 -2px 0 var(--brass)' : 'none',
+              transition: 'color 0.12s, background 0.12s',
+            }}
+            onMouseEnter={e => { if (tab !== t) e.currentTarget.style.color = 'var(--brass)'; }}
+            onMouseLeave={e => { if (tab !== t) e.currentTarget.style.color = 'var(--ink-2)'; }}>
             {t === 'events' ? `Events (${events.length})` : t === 'leads' ? `Leads (${leads.length})` : `Trash${trashCount > 0 ? ` (${trashCount})` : ''}`}
           </button>
         ))}
@@ -773,6 +785,9 @@ export default function AdminDashboard() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <div style={{ flex: 1 }} />
+              <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+                + Add Lead
+              </button>
               <button onClick={() => setAddingEvent(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
                 + Add Event
               </button>
@@ -932,11 +947,12 @@ export default function AdminDashboard() {
               ))}
             </div>
             <div style={{ flex: 1 }} />
-            {leadFilter === 'active' && (
-              <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>
-                + Add Lead
-              </button>
-            )}
+            <button onClick={() => setAddingEvent(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
+              + Add Event
+            </button>
+            <button onClick={() => setAddingLead(true)} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap' }}>
+              + Add Lead
+            </button>
           </div>
           {/* Mobile lead cards */}
           <div className="event-cards-wrap">
