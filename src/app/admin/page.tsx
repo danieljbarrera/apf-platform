@@ -743,33 +743,34 @@ export default function AdminDashboard() {
           />
         </div>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setCompact(c => !c)} className="compact-btn-desktop" title="Tighten table rows and hide secondary columns" style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
+        <button onClick={() => setCompact(c => !c)} title="Tighten rows / cards and hide secondary details" style={{ background: compact ? 'var(--paper-2)' : 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 14px', fontSize: 12, cursor: 'pointer', color: compact ? 'var(--ink-2)' : 'var(--ink-4)', fontFamily: 'var(--sans)', whiteSpace: 'nowrap' }}>
           {compact ? 'Compact ✓' : 'Compact'}
         </button>
-        <style>{`.compact-btn-desktop { display: inline-flex; } @media (max-width: 640px) { .compact-btn-desktop { display: none !important; } }`}</style>
       </div>
 
       {/* Responsive table↔cards toggle — global so it applies on every tab */}
       <style>{`.event-table-wrap { display: block; } .event-cards-wrap { display: none; } @media (max-width: 640px) { .event-table-wrap { display: none; } .event-cards-wrap { display: block; } }`}</style>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, borderBottom: '1px solid var(--rule)', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {(['events', 'leads', 'trash'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{
-              background: tab === t ? 'var(--paper-2)' : 'transparent',
-              border: '1px solid', borderColor: tab === t ? 'var(--rule)' : 'transparent', borderBottom: 'none',
-              borderRadius: '8px 8px 0 0',
-              padding: '9px 20px', fontSize: 13, fontWeight: tab === t ? 700 : 500,
-              color: tab === t ? 'var(--brass)' : 'var(--ink-2)', cursor: 'pointer', fontFamily: 'var(--sans)',
-              marginBottom: -1, letterSpacing: '0.04em',
-              boxShadow: tab === t ? 'inset 0 -2px 0 var(--brass)' : 'none',
-              transition: 'color 0.12s, background 0.12s',
-            }}
-            onMouseEnter={e => { if (tab !== t) e.currentTarget.style.color = 'var(--brass)'; }}
-            onMouseLeave={e => { if (tab !== t) e.currentTarget.style.color = 'var(--ink-2)'; }}>
-            {t === 'events' ? `Events (${events.length})` : t === 'leads' ? `Leads (${leads.length})` : `Trash${trashCount > 0 ? ` (${trashCount})` : ''}`}
-          </button>
-        ))}
+        <div className="tabs-list" style={{ display: 'flex', gap: 6 }}>
+          {(['events', 'leads', 'trash'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{
+                background: tab === t ? 'var(--paper-2)' : 'transparent',
+                border: '1px solid', borderColor: tab === t ? 'var(--rule)' : 'transparent', borderBottom: 'none',
+                borderRadius: '8px 8px 0 0',
+                padding: '9px 20px', fontSize: 13, fontWeight: tab === t ? 700 : 500,
+                color: tab === t ? 'var(--brass)' : 'var(--ink-2)', cursor: 'pointer', fontFamily: 'var(--sans)',
+                marginBottom: -1, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+                boxShadow: tab === t ? 'inset 0 -2px 0 var(--brass)' : 'none',
+                transition: 'color 0.12s, background 0.12s',
+              }}
+              onMouseEnter={e => { if (tab !== t) e.currentTarget.style.color = 'var(--brass)'; }}
+              onMouseLeave={e => { if (tab !== t) e.currentTarget.style.color = 'var(--ink-2)'; }}>
+              {t === 'events' ? `Events (${events.length})` : t === 'leads' ? `Leads (${leads.length})` : `Trash${trashCount > 0 ? ` (${trashCount})` : ''}`}
+            </button>
+          ))}
+        </div>
         <div className="tab-spacer" style={{ flex: 1, minWidth: 12 }} />
         <div className="tab-add-group" style={{ display: 'flex', gap: 8, paddingBottom: 7 }}>
           <button onClick={() => setAddingLead(true)} style={{ fontSize: 12, padding: '7px 16px', whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', cursor: 'pointer', color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontWeight: 500 }}>
@@ -781,6 +782,8 @@ export default function AdminDashboard() {
         </div>
         <style>{`@media (max-width: 640px) {
           .tab-spacer { display: none !important; }
+          .tabs-list { flex: 1; }
+          .tabs-list button { padding: 8px 0 !important; flex: 1; font-size: 12px !important; letter-spacing: 0 !important; }
           .tab-add-group { width: 100%; padding-bottom: 0 !important; margin-top: 10px; }
           .tab-add-group button { flex: 1; padding: 9px 16px !important; }
         }`}</style>
@@ -823,32 +826,39 @@ export default function AdminDashboard() {
                     <div key={String(event.id)}
                       onClick={() => router.push(`/admin/events/${event.id}`)}
                       className="card"
-                      style={{ padding: '12px 14px', cursor: 'pointer', animation: 'rowIn 0.15s ease', ...accent }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <div style={{ fontFamily: 'var(--serif)', fontSize: '1.05rem', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</div>
+                      style={{ padding: compact ? '9px 12px' : '12px 14px', cursor: 'pointer', animation: 'rowIn 0.15s ease', ...accent }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: compact ? 3 : 6 }}>
+                        <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '0.98rem' : '1.05rem', fontWeight: 500, color: 'var(--ink)' }}>{String(event.client_names)}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <DepositPaid event={event} />
                           <StatusBadge status={String(event.status)} />
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: compact ? 0 : 4 }}>
                         <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmt(dayDate)}</span>
                         {rel && <span style={{ fontSize: 10, color: 'var(--brass)', background: 'var(--paper-2)', borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{rel}</span>}
+                        {compact && <div style={{ flex: 1 }} />}
+                        {compact && !!event.square_invoice_id && !!event.estimate_total && (() => {
+                          const bal = Math.round(((Number(event.estimate_total)||0) - (Number(event.amount_paid)||0)) * 100) / 100;
+                          return <span style={{ fontSize: 11, color: bal > 0 ? 'var(--brass)' : 'var(--green)', fontWeight: 600 }}>{moneyShort(bal)} bal</span>;
+                        })()}
                       </div>
-                      {day && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 8 }}>{String(day.venue || '—')} · {totalGuests(event) || '—'} guests · {String(day.service_style || '—')}</div>}
-                      {!!event.square_invoice_id && !!event.estimate_total && (() => {
+                      {!compact && day && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginBottom: 8 }}>{String(day.venue || '—')} · {totalGuests(event) || '—'} guests · {String(day.service_style || '—')}</div>}
+                      {!compact && !!event.square_invoice_id && !!event.estimate_total && (() => {
                         const bal = Math.round(((Number(event.estimate_total)||0) - (Number(event.amount_paid)||0)) * 100) / 100;
                         return <div style={{ fontSize: 12, marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>{moneyShort(Number(event.amount_paid)||0)} paid</span><span style={{ color: 'var(--ink-4)' }}> · </span><span style={{ color: bal > 0 ? 'var(--brass)' : 'var(--green)', fontWeight: 600 }}>{moneyShort(bal)} balance</span></div>;
                       })()}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--paper-3)' }}>
-                        <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{done}/{BOOL_FIELDS.length} checklist</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 80, height: 4, background: 'var(--paper-3)', borderRadius: 99, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99 }} />
+                      {!compact && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--paper-3)' }}>
+                          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{done}/{BOOL_FIELDS.length} checklist</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 80, height: 4, background: 'var(--paper-3)', borderRadius: 99, overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99 }} />
+                            </div>
+                            <TrashBtn onClick={e => { e.stopPropagation(); softDelete('event', String(event.id)); }} />
                           </div>
-                          <TrashBtn onClick={e => { e.stopPropagation(); softDelete('event', String(event.id)); }} />
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
