@@ -63,11 +63,20 @@ export async function POST(req: NextRequest) {
       // forces the displayed total to match the real invoice exactly.
       let lineItems: { name: string; quantity: string; amount: number }[] = [];
       let orderTotal = 0, orderDiscount = 0;
+      let guests: number | null = null, style: string | null = null;
       if (inv.orderId) {
         const ordResp = await client.orders.get({ orderId: inv.orderId });
         const order = ordResp.order;
         orderTotal = cents(order?.totalMoney);
         orderDiscount = cents(order?.totalDiscountMoney);
+        // Derive guests + style from the FOOD line (its quantity = guest count)
+        const foodLine = (order?.lineItems || []).find(li => /food|family style|plated|buffet/i.test(li.name || ''));
+        if (foodLine) {
+          const q = parseInt(foodLine.quantity || '', 10);
+          if (q > 0) guests = q;
+          const nm = (foodLine.name || '').toLowerCase();
+          style = nm.includes('family style') ? 'Family Style' : nm.includes('plated') ? 'Plated' : nm.includes('buffet') ? 'Buffet' : null;
+        }
         const products = (order?.lineItems || []).map(li => ({ name: li.name || 'Item', quantity: '1', amount: cents(li.grossSalesMoney) || (cents(li.totalMoney) - cents(li.totalTaxMoney)) }));
         const charges = (order?.serviceCharges || []).map(sc => ({ name: sc.name || 'Service Charge', quantity: '1', amount: cents(sc.totalMoney) || cents(sc.appliedMoney) }));
         const tax = cents(order?.totalTaxMoney);
@@ -123,7 +132,21 @@ export async function POST(req: NextRequest) {
           update.estimate_discount = orderDiscount || null;
           update.estimate_approved_at = new Date().toISOString();
         }
+        if (guests) update.estimate_guests = guests;
+        if (style) update.estimate_style = style;
         await supabaseAdmin.from('events').update(update).eq('id', ev.id);
+
+        // Backfill the main event day's guests/style so the dashboard shows them
+        if (guests || style) {
+          const { data: dys } = await supabaseAdmin.from('event_days').select('id, day_type').eq('event_id', ev.id);
+          const mainDay = (dys || []).find(d => (d.day_type || 'Main') === 'Main') || (dys || [])[0];
+          if (mainDay) {
+            const dayUpd: Record<string, unknown> = {};
+            if (guests) dayUpd.guests = guests;
+            if (style) dayUpd.service_style = style;
+            await supabaseAdmin.from('event_days').update(dayUpd).eq('id', mainDay.id);
+          }
+        }
       }
       results.push(plan);
     } catch (e: unknown) {

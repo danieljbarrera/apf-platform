@@ -142,9 +142,12 @@ function ProgressBar({ event }: { event: Event }) {
 }
 
 function DepositPaid({ event }: { event: Event }) {
-  // Paid states (green) take priority, then invoice lifecycle (amber/gray)
-  if (event.balance_paid_at) return <PayPill label="PAID" title="Paid in full" tone="green" />;
-  if (event.deposit_paid_at) return <PayPill label="$ ✓" title="Deposit paid" tone="green" />;
+  // Base paid state on actual dollars, not just whether a payment landed —
+  // a partial balance payment is still "partially paid", not "PAID".
+  const total = Number(event.estimate_total) || 0;
+  const paid = Number(event.amount_paid) || 0;
+  if (total > 0 && paid >= total - 0.01) return <PayPill label="PAID" title="Paid in full" tone="green" />;
+  if (paid > 0 || event.deposit_paid_at) return <PayPill label="$ ✓" title="Partially paid" tone="green" />;
   const st = event.square_invoice_status ? String(event.square_invoice_status) : null;
   if (st === 'UNPAID' || st === 'SCHEDULED') return <PayPill label="SENT" title="Invoice sent · awaiting payment" tone="amber" />;
   if (st === 'DRAFT') return <PayPill label="DRAFT" title="Invoice draft · not sent" tone="gray" />;
