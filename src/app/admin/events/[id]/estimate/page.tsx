@@ -5,30 +5,36 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { calcPackage, calcBar, fmtD, STYLES } from '@/lib/pricing';
 
 type Event = Record<string, unknown>;
-
 interface LineItem { name: string; quantity: string; amount: number; }
 
-function buildLineItems(guests: number, style: string, hours: number, addons: { appetizers: number; dessert: boolean; coffee: boolean }, bar: string | null): { items: LineItem[]; total: number; deposit: number } {
+// Auto-generate itemized lines from the configuration. This only SEEDS the
+// editable table — once generated, every line can be edited or removed.
+function autoLineItems(
+  guests: number, style: string, hours: number,
+  addons: { appetizers: number; dessert: boolean; coffee: boolean },
+  bar: string | null, paymentMethod: string,
+): LineItem[] {
   const pkg = calcPackage(guests, hours, style, addons);
   const barCalc = bar && ['Soft Bar', 'Full Bar'].includes(bar) ? calcBar(guests, bar) : null;
   const serviceBase = pkg.subtotal + (barCalc?.subtotal || 0);
 
   const items: LineItem[] = [
     { name: `Food — ${style} ($65/guest)`, quantity: String(guests), amount: 65 * guests },
-    { name: `Staffing — ${pkg.staffing.waitstaff} waitstaff + ${pkg.staffing.captain} captain × ${pkg.staffing.totalHours} hrs`, quantity: '1', amount: pkg.staffing.cost },
+    { name: `Staffing — ${pkg.staffing.waitstaff} waitstaff + ${pkg.staffing.captain} captain × ${pkg.staffing.totalHours} hrs`, quantity: '1', amount: round(pkg.staffing.cost) },
   ];
-  if (pkg.apps > 0) items.push({ name: 'Passed Appetizers', quantity: '1', amount: pkg.apps });
-  if (pkg.dessert > 0) items.push({ name: 'Dessert', quantity: '1', amount: pkg.dessert });
-  if (pkg.coffee > 0) items.push({ name: 'Coffee & Tea Service', quantity: '1', amount: pkg.coffee });
-  if (pkg.minimumApplied) items.push({ name: 'Event Minimum Adjustment', quantity: '1', amount: pkg.subtotal - pkg.rawSubtotal });
-  if (barCalc) items.push({ name: `Bar Package — ${bar} (${barCalc.bartenders} bartender${barCalc.bartenders > 1 ? 's' : ''})`, quantity: '1', amount: barCalc.subtotal });
-  items.push({ name: 'Service Fee (10%)', quantity: '1', amount: serviceBase * 0.10 });
-  items.push({ name: 'Sales Tax (9.25%)', quantity: '1', amount: serviceBase * 0.0925 });
-  items.push({ name: 'Card Processing (3.5%)', quantity: '1', amount: serviceBase * 0.035 });
-
-  const total = pkg.total + (barCalc?.total || 0);
-  return { items, total, deposit: Math.round(total * 0.25 * 100) / 100 };
+  if (pkg.apps > 0) items.push({ name: 'Passed Appetizers', quantity: '1', amount: round(pkg.apps) });
+  if (pkg.dessert > 0) items.push({ name: 'Dessert', quantity: '1', amount: round(pkg.dessert) });
+  if (pkg.coffee > 0) items.push({ name: 'Coffee & Tea Service', quantity: '1', amount: round(pkg.coffee) });
+  if (pkg.minimumApplied) items.push({ name: 'Event Minimum Adjustment', quantity: '1', amount: round(pkg.subtotal - pkg.rawSubtotal) });
+  if (barCalc) items.push({ name: `Bar Package — ${bar} (${barCalc.bartenders} bartender${barCalc.bartenders > 1 ? 's' : ''})`, quantity: '1', amount: round(barCalc.subtotal) });
+  items.push({ name: 'Service Fee (10%)', quantity: '1', amount: round(serviceBase * 0.10) });
+  items.push({ name: 'Sales Tax (9.25%)', quantity: '1', amount: round(serviceBase * 0.0925) });
+  if (paymentMethod !== 'cash') items.push({ name: 'Card Processing (3.5%)', quantity: '1', amount: round(serviceBase * 0.035) });
+  return items;
 }
+
+const round = (n: number) => Math.round(n * 100) / 100;
+const sum = (items: LineItem[]) => round(items.reduce((s, i) => s + (Number(i.amount) || 0), 0));
 
 export default function EstimatePage() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +42,8 @@ export default function EstimatePage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [deposit, setDeposit] = useState<number>(0);
   const [invoiceMsg, setInvoiceMsg] = useState('');
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -51,14 +59,38 @@ export default function EstimatePage() {
 
   async function loadEvent() {
     const r = await authFetch(`/api/admin/events/${id}`);
-    setEvent(await r.json());
+    const data = await r.json();
+    setEvent(data);
+    return data;
   }
 
   useEffect(() => {
-    authFetch(`/api/admin/events/${id}`).then(r => r.json()).then(data => { setEvent(data); setLoading(false); });
+    authFetch(`/api/admin/events/${id}`).then(r => r.json()).then(data => {
+      setEvent(data);
+      const stored = (data.estimate_line_items as LineItem[]) || null;
+      if (stored && stored.length) {
+        setItems(stored);
+        setDeposit(Number(data.estimate_deposit) || round(sum(stored) * 0.25));
+      }
+      setLoading(false);
+    });
   }, [id, authFetch]);
 
-  const patch = useCallback((updates: Record<string, unknown>) => {
+  // Debounced autosave of the working draft (skipped once locked)
+  const save = useCallback((nextItems: LineItem[], nextDeposit: number, extra?: Record<string, unknown>) => {
+    setSaveState('saving');
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      await authFetch(`/api/admin/events/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ estimate_line_items: nextItems, estimate_total: sum(nextItems), estimate_deposit: nextDeposit, ...extra }),
+      });
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 1500);
+    }, 600);
+  }, [id, authFetch]);
+
+  const patchConfig = useCallback((updates: Record<string, unknown>) => {
     setEvent(prev => prev ? { ...prev, ...updates } : prev);
     setSaveState('saving');
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -66,7 +98,7 @@ export default function EstimatePage() {
       await authFetch(`/api/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify(updates) });
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 1500);
-    }, 500);
+    }, 600);
   }, [id, authFetch]);
 
   if (loading || !event) return <div style={{ color: 'var(--ink-3)', fontSize: 14, padding: '2rem' }}>Loading…</div>;
@@ -82,31 +114,49 @@ export default function EstimatePage() {
   const dessert = event.include_dessert === true;
   const coffee = event.include_coffee === true;
   const bar = event.bar_package ? String(event.bar_package) : null;
+  const paymentMethod = event.payment_method ? String(event.payment_method) : 'card';
+  const locked = !!event.estimate_approved_at;
 
-  const live = guests > 0 ? buildLineItems(guests, style, hours, { appetizers, dessert, coffee }, bar) : null;
-  const approved = !!event.estimate_approved_at;
-  const approvedItems = (event.estimate_line_items as LineItem[]) || null;
+  const total = sum(items);
+  const defaultDeposit = round(total * 0.25);
 
-  // Has the config changed since approval?
-  const drifted = approved && live && JSON.stringify(live.items) !== JSON.stringify(approvedItems);
+  function recalc() {
+    if (items.length && !confirm('Replace the current line items with freshly calculated ones from the configuration? Any manual edits will be lost.')) return;
+    const next = autoLineItems(guests, style, hours, { appetizers, dessert, coffee }, bar, paymentMethod);
+    const dep = round(sum(next) * 0.25);
+    setItems(next); setDeposit(dep);
+    save(next, dep);
+  }
+
+  function editItem(idx: number, field: 'name' | 'amount', value: string) {
+    const next = items.map((it, i) => i === idx ? { ...it, [field]: field === 'amount' ? (parseFloat(value) || 0) : value } : it);
+    setItems(next);
+    save(next, deposit);
+  }
+  function deleteItem(idx: number) {
+    const next = items.filter((_, i) => i !== idx);
+    setItems(next);
+    save(next, deposit);
+  }
+  function addItem() {
+    const next = [...items, { name: '', quantity: '1', amount: 0 }];
+    setItems(next);
+    save(next, deposit);
+  }
+  function changeDeposit(v: string) {
+    const d = parseFloat(v) || 0;
+    setDeposit(d);
+    save(items, d);
+  }
 
   async function approve() {
-    if (!live) return;
     await authFetch(`/api/admin/events/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({
-        estimate_line_items: live.items,
-        estimate_total: live.total,
-        estimate_deposit: live.deposit,
-        estimate_approved_at: new Date().toISOString(),
-        estimate_guests: guests,
-        estimate_style: style,
-      }),
+      body: JSON.stringify({ estimate_line_items: items, estimate_total: total, estimate_deposit: deposit, estimate_guests: guests, estimate_style: style, estimate_approved_at: new Date().toISOString() }),
     });
     loadEvent();
   }
-
-  async function unapprove() {
+  async function unlock() {
     await authFetch(`/api/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify({ estimate_approved_at: null }) });
     loadEvent();
   }
@@ -120,7 +170,11 @@ export default function EstimatePage() {
     setInvoiceMsg(data.already_exists ? 'Draft already exists in Square' : 'Draft invoice created in Square — review & send there');
     loadEvent();
   }
-
+  async function unlinkInvoice() {
+    if (!confirm('Unlink the Square invoice from this event? The invoice stays in Square (cancel it there if needed); this just lets you create a new draft.')) return;
+    await authFetch(`/api/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }) });
+    setInvoiceMsg(''); loadEvent();
+  }
   async function syncSquare() {
     setSyncing(true);
     const res = await authFetch('/api/admin/square/sync', { method: 'POST', body: JSON.stringify({ event_id: id }) });
@@ -134,107 +188,94 @@ export default function EstimatePage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      {/* Breadcrumb */}
       <div style={{ marginBottom: '1.25rem' }}>
         <button onClick={() => router.push(`/admin/events/${id}`)} style={{ background: 'none', border: 'none', color: 'var(--ink-4)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', padding: 0 }}>← Event</button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ fontFamily: 'var(--serif)', fontSize: '1.7rem', fontWeight: 500 }}>Estimate</h1>
         <span style={{ fontSize: 12, color: saveState === 'saved' ? 'var(--green)' : 'var(--ink-4)' }}>{saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : ''}</span>
       </div>
       <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: '1.5rem' }}>{String(event.client_names)}{event.quote_number ? ` · ${String(event.quote_number)}` : ''}</div>
 
-      {/* Config editor */}
-      <div className="card" style={{ padding: '1.2rem 1.4rem', marginBottom: '1.25rem', opacity: approved ? 0.6 : 1, pointerEvents: approved ? 'none' : 'auto' }}>
+      {/* Configuration */}
+      <div className="card" style={{ padding: '1.2rem 1.4rem', marginBottom: '1.25rem', opacity: locked ? 0.55 : 1, pointerEvents: locked ? 'none' : 'auto' }}>
         <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 14 }}>Configuration</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 14 }}>
-          <div>
-            <div style={labelStyle}>Guests</div>
-            <input type="number" min="1" value={guests || ''} onChange={e => patch({ estimate_guests: e.target.value ? Number(e.target.value) : null })} style={{ width: '100%', ...selectStyle }} />
-          </div>
-          <div>
-            <div style={labelStyle}>Service Style</div>
-            <select value={style} onChange={e => patch({ estimate_style: e.target.value })} style={{ width: '100%', ...selectStyle }}>
-              {STYLES.map(s => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={labelStyle}>Event Hours</div>
-            <input type="number" min="1" max="16" value={hours} onChange={e => patch({ event_hours: e.target.value ? Number(e.target.value) : 5 })} style={{ width: '100%', ...selectStyle }} />
-          </div>
-          <div>
-            <div style={labelStyle}>Bar</div>
-            <select value={bar || 'None'} onChange={e => patch({ bar_package: e.target.value === 'None' ? null : e.target.value })} style={{ width: '100%', ...selectStyle }}>
-              {['None', 'Soft Bar', 'Full Bar'].map(s => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={labelStyle}>Appetizers</div>
-            <select value={appetizers} onChange={e => patch({ appetizer_count: Number(e.target.value) })} style={{ width: '100%', ...selectStyle }}>
-              {[0,1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+          <div><div style={labelStyle}>Guests</div><input type="number" min="1" value={guests || ''} onChange={e => patchConfig({ estimate_guests: e.target.value ? Number(e.target.value) : null })} style={{ width: '100%', ...selectStyle }} /></div>
+          <div><div style={labelStyle}>Service Style</div><select value={style} onChange={e => patchConfig({ estimate_style: e.target.value })} style={{ width: '100%', ...selectStyle }}>{STYLES.map(s => <option key={s}>{s}</option>)}</select></div>
+          <div><div style={labelStyle}>Event Hours</div><input type="number" min="1" max="16" value={hours} onChange={e => patchConfig({ event_hours: e.target.value ? Number(e.target.value) : 5 })} style={{ width: '100%', ...selectStyle }} /></div>
+          <div><div style={labelStyle}>Bar</div><select value={bar || 'None'} onChange={e => patchConfig({ bar_package: e.target.value === 'None' ? null : e.target.value })} style={{ width: '100%', ...selectStyle }}>{['None', 'Soft Bar', 'Full Bar'].map(s => <option key={s}>{s}</option>)}</select></div>
+          <div><div style={labelStyle}>Appetizers</div><select value={appetizers} onChange={e => patchConfig({ appetizer_count: Number(e.target.value) })} style={{ width: '100%', ...selectStyle }}>{[0,1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}</select></div>
+          <div><div style={labelStyle}>Payment</div><select value={paymentMethod} onChange={e => patchConfig({ payment_method: e.target.value })} style={{ width: '100%', ...selectStyle }}><option value="card">Card</option><option value="cash">Cash / Check</option></select></div>
         </div>
-        <div style={{ display: 'flex', gap: 18, marginTop: 14 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--ink-2)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={dessert} onChange={e => patch({ include_dessert: e.target.checked })} /> Dessert
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--ink-2)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={coffee} onChange={e => patch({ include_coffee: e.target.checked })} /> Coffee & Tea
-          </label>
+        <div style={{ display: 'flex', gap: 18, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--ink-2)', cursor: 'pointer' }}><input type="checkbox" checked={dessert} onChange={e => patchConfig({ include_dessert: e.target.checked })} /> Dessert</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--ink-2)', cursor: 'pointer' }}><input type="checkbox" checked={coffee} onChange={e => patchConfig({ include_coffee: e.target.checked })} /> Coffee & Tea</label>
+          <div style={{ flex: 1 }} />
+          <button onClick={recalc} className="btn btn-brass" style={{ fontSize: 12, padding: '7px 16px' }}>{items.length ? 'Recalculate from Config' : 'Calculate'}</button>
         </div>
+        {paymentMethod === 'cash' && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 10 }}>Cash/check selected — card processing (3.5%) is excluded when you recalculate.</div>}
       </div>
 
-      {/* Live breakdown */}
-      {live && (
+      {/* Line items */}
+      {items.length > 0 && (
         <div className="card" style={{ padding: '1.2rem 1.4rem', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
-            <span>{approved ? 'Approved Estimate' : 'Preview'}</span>
-            {approved && <span style={{ color: 'var(--green)' }}>✓ Approved {new Date(String(event.estimate_approved_at)).toLocaleDateString()}</span>}
+            <span>{locked ? 'Approved Estimate' : 'Line Items'}</span>
+            {locked && <span style={{ color: 'var(--green)' }}>✓ Approved {new Date(String(event.estimate_approved_at)).toLocaleDateString()}</span>}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <tbody>
-              {(approved && approvedItems ? approvedItems : live.items).map((it, i) => (
+              {items.map((it, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid var(--paper-2)' }}>
-                  <td style={{ padding: '7px 0', color: 'var(--ink-2)' }}>{it.name}</td>
-                  <td style={{ padding: '7px 0', textAlign: 'right', color: 'var(--ink)', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtD(it.amount)}</td>
+                  <td style={{ padding: '5px 0', width: '100%' }}>
+                    {locked
+                      ? <span style={{ color: 'var(--ink-2)' }}>{it.name}</span>
+                      : <input value={it.name} onChange={e => editItem(i, 'name', e.target.value)} placeholder="Line description" style={{ width: '100%', border: '1px solid transparent', borderRadius: 4, padding: '4px 6px', fontSize: 13, fontFamily: 'var(--sans)', background: 'transparent' }} onFocus={e => e.currentTarget.style.borderColor = 'var(--rule)'} onBlur={e => e.currentTarget.style.borderColor = 'transparent'} />}
+                  </td>
+                  <td style={{ padding: '5px 0 5px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {locked
+                      ? <span style={{ fontWeight: 500 }}>{fmtD(it.amount)}</span>
+                      : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>$<input type="number" step="0.01" value={it.amount} onChange={e => editItem(i, 'amount', e.target.value)} style={{ width: 90, textAlign: 'right', border: '1px solid var(--rule)', borderRadius: 4, padding: '4px 6px', fontSize: 13, fontFamily: 'var(--sans)' }} /></span>}
+                  </td>
+                  {!locked && <td style={{ padding: '5px 0 5px 8px' }}><button onClick={() => deleteItem(i)} title="Remove line" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 15, lineHeight: 1 }} onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--ink-4)'}>×</button></td>}
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid var(--rule)' }}>
                 <td style={{ padding: '10px 0 4px', fontWeight: 600, fontFamily: 'var(--serif)', fontSize: 15 }}>Total</td>
-                <td style={{ padding: '10px 0 4px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--serif)', fontSize: 15 }}>{fmtD(approved && event.estimate_total ? Number(event.estimate_total) : live.total)}</td>
+                <td style={{ padding: '10px 0 4px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--serif)', fontSize: 15 }} colSpan={locked ? 1 : 2}>{fmtD(total)}</td>
               </tr>
               <tr>
-                <td style={{ padding: '2px 0', color: 'var(--brass)', fontWeight: 600 }}>25% Deposit</td>
-                <td style={{ padding: '2px 0', textAlign: 'right', color: 'var(--brass)', fontWeight: 600 }}>{fmtD(approved && event.estimate_deposit ? Number(event.estimate_deposit) : live.deposit)}</td>
+                <td style={{ padding: '4px 0', color: 'var(--brass)', fontWeight: 600 }}>Deposit</td>
+                <td style={{ padding: '4px 0', textAlign: 'right' }} colSpan={locked ? 1 : 2}>
+                  {locked
+                    ? <span style={{ color: 'var(--brass)', fontWeight: 600 }}>{fmtD(deposit)}</span>
+                    : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--brass)', fontWeight: 600 }}>$<input type="number" step="0.01" value={deposit} onChange={e => changeDeposit(e.target.value)} style={{ width: 100, textAlign: 'right', border: '1px solid var(--rule)', borderRadius: 4, padding: '4px 6px', fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--brass)', fontWeight: 600 }} /></span>}
+                </td>
               </tr>
             </tfoot>
           </table>
 
-          {drifted && (
-            <div style={{ marginTop: 14, background: '#fff8ed', border: '1px solid #d97706', borderRadius: 'var(--r-sm)', padding: '8px 12px', fontSize: 12, color: '#92400e' }}>
-              Configuration changed since approval. Re-approve to update the locked estimate.
+          {!locked && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 10 }}>
+              <button onClick={addItem} style={{ background: 'none', border: '1px dashed var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>+ Add line</button>
+              <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>25% would be {fmtD(defaultDeposit)}</span>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-            {!approved ? (
-              <button onClick={approve} className="btn btn-brass" style={{ fontSize: 13, padding: '9px 22px' }}>Approve Estimate</button>
-            ) : (
-              <>
-                <button onClick={unapprove} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Unlock to Edit</button>
-                {drifted && <button onClick={approve} className="btn btn-brass" style={{ fontSize: 13, padding: '9px 18px' }}>Re-approve</button>}
-              </>
-            )}
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            {locked
+              ? <button onClick={unlock} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>Unlock to Edit</button>
+              : <button onClick={approve} className="btn btn-brass" style={{ fontSize: 13, padding: '9px 22px' }}>Approve Estimate</button>}
           </div>
         </div>
       )}
 
-      {/* Square invoice */}
-      {approved && (
+      {/* Square */}
+      {locked && (
         <div className="card" style={{ padding: '1.2rem 1.4rem', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600, marginBottom: 12 }}>Square Invoice</div>
           {(!!event.deposit_paid_at || !!event.balance_paid_at) && (
@@ -247,23 +288,19 @@ export default function EstimatePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '9px 18px', fontSize: 13, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>
               <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>Review the draft in Square, then send it from there.</span>
+              <button onClick={unlinkInvoice} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--ink-4)', fontFamily: 'var(--sans)' }}>Unlink</button>
             </div>
           ) : (
             <div>
-              <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>
-                {invoiceLoading ? 'Creating…' : 'Create Draft Invoice in Square'}
-              </button>
+              <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Draft Invoice in Square'}</button>
               <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Creates a draft from the approved line items. You review and send it from Square — nothing goes to the client automatically.</div>
             </div>
           )}
           {invoiceMsg && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 10 }}>{invoiceMsg}</div>}
 
-          {/* Sync — pull live invoice status/IDs from Square */}
           {!!event.square_customer_id && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--paper-3)' }}>
-              <button onClick={syncSquare} disabled={syncing} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: syncing ? 'wait' : 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
-                {syncing ? 'Syncing…' : '↻ Sync from Square'}
-              </button>
+              <button onClick={syncSquare} disabled={syncing} style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, cursor: syncing ? 'wait' : 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>{syncing ? 'Syncing…' : '↻ Sync from Square'}</button>
               {!!event.square_invoice_status && <span style={{ marginLeft: 10, fontSize: 11, color: 'var(--ink-4)' }}>Status: <strong style={{ color: 'var(--ink-2)' }}>{String(event.square_invoice_status)}</strong></span>}
               {syncedInvoices && syncedInvoices.length > 0 && (
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -275,8 +312,7 @@ export default function EstimatePage() {
                   ))}
                 </div>
               )}
-              {syncedInvoices && syncedInvoices.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>No invoice linked to this event yet. Create the draft above to link one.</div>}
-              {otherInvoiceCount > 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>This client has {otherInvoiceCount} other invoice{otherInvoiceCount > 1 ? 's' : ''} in Square from other events (not shown — only this event&apos;s invoice is tracked here).</div>}
+              {otherInvoiceCount > 0 && <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 8 }}>This client has {otherInvoiceCount} other invoice{otherInvoiceCount > 1 ? 's' : ''} in Square from other events (not shown).</div>}
             </div>
           )}
         </div>
