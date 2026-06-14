@@ -292,8 +292,8 @@ export default function EstimatePage() {
             </div>
           ) : (
             <div>
-              <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Draft Invoice in Square'}</button>
-              <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Creates a draft from the approved line items. You review and send it from Square — nothing goes to the client automatically.</div>
+              <button onClick={createInvoice} disabled={invoiceLoading} style={{ background: '#006aff', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', padding: '9px 22px', fontSize: 13, fontWeight: 600, cursor: invoiceLoading ? 'wait' : 'pointer', fontFamily: 'var(--sans)', opacity: invoiceLoading ? 0.7 : 1 }}>{invoiceLoading ? 'Creating…' : 'Create Invoice in Square'}</button>
+              <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>Builds the invoice from the approved line items in Square. It is <strong>not</strong> emailed to the client automatically — open it, review, and send it from Square when ready.</div>
             </div>
           )}
           {invoiceMsg && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 10 }}>{invoiceMsg}</div>}

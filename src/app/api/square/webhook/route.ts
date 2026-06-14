@@ -79,15 +79,21 @@ export async function POST(req: NextRequest) {
         const depositPaid = deposit && money(deposit.total_completed_amount_money as { amount?: number }) > 0;
         const balancePaid = balance && money(balance.total_completed_amount_money as { amount?: number }) > 0;
 
+        const todayDate = new Date().toISOString().split('T')[0];
         let depositJustLanded = false;
         if (depositPaid && !ev.deposit_paid_at) {
           updates.deposit_paid_at = new Date().toISOString();
           depositJustLanded = true;
+          // Deposit = retainer in her flow
+          updates.retainer_paid = 'yes';
+          updates.retainer_paid_date = todayDate;
           // Auto-advance New → Booked
           if (ev.status === 'New') updates.status = 'Booked';
         }
         if (balancePaid && !ev.balance_paid_at) {
           updates.balance_paid_at = new Date().toISOString();
+          updates.final_payment_received = true;
+          updates.final_payment_received_date = todayDate;
         }
 
         await supabaseAdmin.from('events').update(updates).eq('id', ev.id);

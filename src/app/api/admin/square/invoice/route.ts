@@ -153,25 +153,30 @@ export async function POST(req: NextRequest) {
     const invoice = invoiceResp.invoice;
     if (!invoice?.id) return NextResponse.json({ error: 'Failed to create Square invoice' }, { status: 500 });
 
-    // Leave as DRAFT — she reviews and sends from Square. Build a dashboard link
-    // (draft invoices have no public payment URL until published).
-    const dashHost = process.env.SQUARE_ENVIRONMENT === 'sandbox'
-      ? 'https://app.squareupsandbox.com'
-      : 'https://app.squareup.com';
-    const invoiceUrl = `${dashHost}/dashboard/invoices/${invoice.id}`;
+    // Publish with SHARE_MANUALLY: creates a real, reviewable invoice page with a
+    // working public_url, but does NOT email the client (she shares it when ready).
+    // Draft invoices have no usable link, so publishing is what gives a working URL.
+    const pubResp = await squareClient.invoices.publish({
+      invoiceId: invoice.id,
+      version: invoice.version ?? 0,
+      idempotencyKey: `apf-publish-${event_id}-${invoice.version ?? 0}`,
+    });
+    const published = pubResp.invoice;
+    const invoiceUrl = published?.publicUrl ?? null;
 
     await supabaseAdmin.from('events').update({
-      square_invoice_id: invoice.id,
+      square_invoice_id: published?.id ?? invoice.id,
       square_invoice_url: invoiceUrl,
+      square_invoice_status: published?.status ?? 'UNPAID',
       square_order_id: orderId,
+      retainer_invoice_sent: true, // invoice is live in Square
     }).eq('id', event_id);
 
     return NextResponse.json({
-      invoice_id: invoice.id,
+      invoice_id: published?.id ?? invoice.id,
       invoice_url: invoiceUrl,
       deposit,
       grand_total: grandTotal,
-      draft: true,
     });
 
   } catch (e: unknown) {

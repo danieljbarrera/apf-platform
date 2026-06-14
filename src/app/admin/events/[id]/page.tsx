@@ -21,6 +21,19 @@ function fmt(d: string | null) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+// Maps a raw Square invoice status to a friendly label + color for the event page.
+const SQUARE_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  DRAFT:            { label: 'Draft (not sent)',    color: '#79715f', bg: '#f4f4f4' },
+  UNPAID:           { label: 'Sent · Awaiting payment', color: '#b45309', bg: '#fff7ed' },
+  SCHEDULED:        { label: 'Scheduled',           color: '#2d5a9e', bg: '#e8f0ff' },
+  PARTIALLY_PAID:   { label: 'Deposit paid',        color: '#785e36', bg: '#f5efe4' },
+  PAID:             { label: 'Paid in full',        color: '#38614a', bg: '#ecf4ef' },
+  PARTIALLY_REFUNDED: { label: 'Partially refunded', color: '#79715f', bg: '#f4f4f4' },
+  REFUNDED:         { label: 'Refunded',            color: '#79715f', bg: '#f4f4f4' },
+  CANCELED:         { label: 'Canceled',            color: '#7c3030', bg: '#fbecec' },
+  FAILED:           { label: 'Payment failed',      color: '#7c3030', bg: '#fbecec' },
+};
+
 const PHASES = [
   {
     title: 'Booking',
@@ -445,6 +458,27 @@ export default function EventDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Square payments */}
+      {(!!event.square_invoice_id || !!event.estimate_approved_at) && (
+        <div className="card" style={{ padding: '1rem 1.4rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--brass)', fontWeight: 600 }}>Payments</div>
+            <button onClick={() => router.push(`/admin/events/${id}/estimate`)} style={{ background: 'none', border: 'none', color: 'var(--brass)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', padding: 0 }}>Estimate →</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {!!event.square_invoice_status && (() => {
+              const s = SQUARE_STATUS[String(event.square_invoice_status)] || { label: String(event.square_invoice_status), color: 'var(--ink-3)', bg: 'var(--paper-2)' };
+              return <span style={{ fontSize: 12, fontWeight: 600, color: s.color, background: s.bg, borderRadius: 99, padding: '4px 12px' }}>{s.label}</span>;
+            })()}
+            {!!event.deposit_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Deposit paid</span>}
+            {!!event.balance_paid_at && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid #c4dccd', borderRadius: 99, padding: '3px 11px' }}>✓ Balance paid</span>}
+            {!event.square_invoice_id && !!event.estimate_approved_at && <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>Estimate approved · no invoice created yet</span>}
+            <div style={{ flex: 1 }} />
+            {!!event.square_invoice_url && <a href={String(event.square_invoice_url)} target="_blank" rel="noreferrer" style={{ background: '#006aff', color: '#fff', borderRadius: 'var(--r-sm)', padding: '6px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--sans)' }}>Open in Square ↗</a>}
+          </div>
+        </div>
+      )}
 
       {/* Event days — editable */}
       <div className="day-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 3)}, 1fr)`, gap: 12, marginBottom: days.length > 0 ? 8 : '1.75rem' }}>

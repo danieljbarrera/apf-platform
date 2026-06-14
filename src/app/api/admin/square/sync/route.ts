@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const { event_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
-  const { data: event } = await supabaseAdmin.from('events').select('square_customer_id, square_invoice_id, deposit_paid_at, balance_paid_at').eq('id', event_id).single();
+  const { data: event } = await supabaseAdmin.from('events').select('square_customer_id, square_invoice_id, deposit_paid_at, balance_paid_at, status').eq('id', event_id).single();
   if (!event?.square_customer_id) {
     return NextResponse.json({ invoices: [], message: 'No Square customer linked yet' });
   }
@@ -59,12 +59,22 @@ export async function POST(req: NextRequest) {
     // we must never stamp this event paid from a different event's invoice.
     const primary = all.find(i => i.is_this_event);
     if (primary) {
+      const todayDate = new Date().toISOString().split('T')[0];
       const updates: Record<string, unknown> = {
         square_invoice_url: primary.public_url,
         square_invoice_status: primary.status,
       };
-      if (primary.deposit_paid > 0 && !event.deposit_paid_at) updates.deposit_paid_at = new Date().toISOString();
-      if (primary.balance_paid > 0 && !event.balance_paid_at) updates.balance_paid_at = new Date().toISOString();
+      if (primary.deposit_paid > 0 && !event.deposit_paid_at) {
+        updates.deposit_paid_at = new Date().toISOString();
+        updates.retainer_paid = 'yes';
+        updates.retainer_paid_date = todayDate;
+        if (event.status === 'New') updates.status = 'Booked';
+      }
+      if (primary.balance_paid > 0 && !event.balance_paid_at) {
+        updates.balance_paid_at = new Date().toISOString();
+        updates.final_payment_received = true;
+        updates.final_payment_received_date = todayDate;
+      }
       await supabaseAdmin.from('events').update(updates).eq('id', event_id);
     }
 
