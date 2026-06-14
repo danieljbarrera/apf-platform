@@ -35,15 +35,22 @@ async function notifyOwner(subject: string, lines: string[]) {
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get('x-square-hmacsha256-signature') || '';
-  const signatureKey = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || '';
 
-  // Verify the request genuinely came from Square
-  const valid = await WebhooksHelper.verifySignature({
-    requestBody: body,
-    signatureHeader: signature,
-    signatureKey,
-    notificationUrl: NOTIFICATION_URL,
-  }).catch(() => false);
+  // Try each configured signature key (production + sandbox) so either
+  // environment's webhook can hit this single endpoint.
+  const keys = [
+    process.env.SQUARE_PROD_WEBHOOK_KEY,
+    process.env.SQUARE_SANDBOX_WEBHOOK_KEY,
+    process.env.SQUARE_WEBHOOK_SIGNATURE_KEY,
+  ].filter(Boolean) as string[];
+
+  let valid = false;
+  for (const signatureKey of keys) {
+    if (await WebhooksHelper.verifySignature({ requestBody: body, signatureHeader: signature, signatureKey, notificationUrl: NOTIFICATION_URL }).catch(() => false)) {
+      valid = true;
+      break;
+    }
+  }
 
   if (!valid) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });

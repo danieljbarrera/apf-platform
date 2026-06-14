@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { squareClient, squareLocationId } from '@/lib/square';
+import { squareFor, currentSquareMode, dashHostFor, type SquareEnv } from '@/lib/square';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -18,14 +18,14 @@ export async function POST(req: NextRequest) {
   const { event_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
-  const { data: event } = await supabaseAdmin.from('events').select('square_customer_id, square_invoice_id, deposit_paid_at, balance_paid_at, status').eq('id', event_id).single();
+  const { data: event } = await supabaseAdmin.from('events').select('square_customer_id, square_invoice_id, deposit_paid_at, balance_paid_at, status, square_env').eq('id', event_id).single();
   if (!event?.square_customer_id) {
     return NextResponse.json({ invoices: [], message: 'No Square customer linked yet' });
   }
 
-  const dashHost = process.env.SQUARE_ENVIRONMENT === 'sandbox'
-    ? 'https://app.squareupsandbox.com'
-    : 'https://app.squareup.com';
+  const env = (event.square_env as SquareEnv) || currentSquareMode();
+  const { client: squareClient, locationId: squareLocationId } = squareFor(env);
+  const dashHost = dashHostFor(env);
 
   try {
     const resp = await squareClient.invoices.search({

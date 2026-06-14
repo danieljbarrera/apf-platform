@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { squareClient } from '@/lib/square';
+import { squareFor, currentSquareMode, type SquareEnv } from '@/lib/square';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -18,11 +18,13 @@ export async function POST(req: NextRequest) {
   const { event_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
-  const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id, square_invoice_status').eq('id', event_id).single();
+  const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id, square_invoice_status, square_env').eq('id', event_id).single();
   if (!event?.square_invoice_id) return NextResponse.json({ error: 'No invoice to send — create it first.' }, { status: 400 });
   if (event.square_invoice_status && event.square_invoice_status !== 'DRAFT') {
     return NextResponse.json({ error: 'This invoice has already been sent.' }, { status: 400 });
   }
+
+  const { client: squareClient } = squareFor((event.square_env as SquareEnv) || currentSquareMode());
 
   try {
     const cur = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });

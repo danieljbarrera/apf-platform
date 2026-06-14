@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { squareClient, squareLocationId } from '@/lib/square';
+import { squareFor, currentSquareMode, dashHostFor, type SquareEnv } from '@/lib/square';
 
 async function verifyAuth(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -31,11 +31,17 @@ export async function POST(req: NextRequest) {
     .single();
   if (evErr || !event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
 
+  // New invoices use the current mode; cleanup of an existing one uses ITS env.
+  const mode = currentSquareMode();
+  const { client: squareClient, locationId: squareLocationId } = squareFor(mode);
+
   // If an invoice is already linked, clean it up before making a new one so we
   // never accumulate orphaned invoices in Square. Refuse if it's already been paid.
   if (event.square_invoice_id) {
+    const prevEnv = (event.square_env as SquareEnv) || mode;
+    const { client: prevClient } = squareFor(prevEnv);
     try {
-      const existing = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
+      const existing = await prevClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
       const inv = existing.invoice;
       const st = inv?.status;
       if (st === 'PAID' || st === 'PARTIALLY_PAID') {
@@ -43,9 +49,9 @@ export async function POST(req: NextRequest) {
       }
       if (inv?.id) {
         if (st === 'DRAFT') {
-          await squareClient.invoices.delete({ invoiceId: inv.id, version: inv.version ?? 0 });
+          await prevClient.invoices.delete({ invoiceId: inv.id, version: inv.version ?? 0 });
         } else if (st !== 'CANCELED') {
-          await squareClient.invoices.cancel({ invoiceId: inv.id, version: inv.version ?? 0 });
+          await prevClient.invoices.cancel({ invoiceId: inv.id, version: inv.version ?? 0 });
         }
       }
     } catch (e) {
@@ -207,14 +213,12 @@ export async function POST(req: NextRequest) {
 
     // Leave as DRAFT — created is NOT the same as sent. She reviews, then explicitly
     // sends it (the /send endpoint publishes, which emails the client).
-    const dashHost = process.env.SQUARE_ENVIRONMENT === 'sandbox'
-      ? 'https://app.squareupsandbox.com' : 'https://app.squareup.com';
-
     await supabaseAdmin.from('events').update({
       square_invoice_id: invoice.id,
-      square_invoice_url: `${dashHost}/dashboard/invoices/${invoice.id}`,
+      square_invoice_url: `${dashHostFor(mode)}/dashboard/invoices/${invoice.id}`,
       square_invoice_status: 'DRAFT',
       square_order_id: orderId,
+      square_env: mode,
       invoice_sent_at: null,
     }).eq('id', event_id);
 
@@ -240,8 +244,9 @@ export async function DELETE(req: NextRequest) {
   const { event_id } = await req.json();
   if (!event_id) return NextResponse.json({ error: 'event_id required' }, { status: 400 });
 
-  const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id').eq('id', event_id).single();
+  const { data: event } = await supabaseAdmin.from('events').select('square_invoice_id, square_env').eq('id', event_id).single();
   if (event?.square_invoice_id) {
+    const { client: squareClient } = squareFor((event.square_env as SquareEnv) || currentSquareMode());
     try {
       const existing = await squareClient.invoices.get({ invoiceId: String(event.square_invoice_id) });
       const inv = existing.invoice;
@@ -256,7 +261,7 @@ export async function DELETE(req: NextRequest) {
       console.error('Unlink cleanup failed:', e);
     }
   }
-  await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null }).eq('id', event_id);
+  await supabaseAdmin.from('events').update({ square_invoice_id: null, square_invoice_url: null, square_invoice_status: null, square_env: null }).eq('id', event_id);
   return NextResponse.json({ ok: true });
 }
 
@@ -268,6 +273,7 @@ export async function GET(req: NextRequest) {
   if (!invoiceId) return NextResponse.json({ error: 'invoice_id required' }, { status: 400 });
 
   try {
+    const { client: squareClient } = squareFor(currentSquareMode());
     const resp = await squareClient.invoices.get({ invoiceId });
     const inv = resp.invoice;
     return NextResponse.json({
