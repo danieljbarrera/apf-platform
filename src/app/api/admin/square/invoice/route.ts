@@ -56,11 +56,15 @@ export async function POST(req: NextRequest) {
   const deposit = Math.round(grandTotal * 0.25 * 100) / 100;
 
   const eventDate = new Date(String(firstDay.event_date) + 'T12:00:00');
-  const balanceDue = new Date(eventDate);
-  balanceDue.setDate(balanceDue.getDate() - 14);
   const today = new Date();
   const depositDueStr = dateStr(today);
-  const balanceDueStr = dateStr(balanceDue > today ? balanceDue : today);
+
+  // Balance due 14 days before event, but always at least 1 day after the deposit due date
+  const minBalance = new Date(today);
+  minBalance.setDate(minBalance.getDate() + 1);
+  const balanceTarget = new Date(eventDate);
+  balanceTarget.setDate(balanceTarget.getDate() - 14);
+  const balanceDueStr = dateStr(balanceTarget > minBalance ? balanceTarget : minBalance);
 
   const clientNames = String(event.client_names || '');
   const nameParts = clientNames.split(' ');
